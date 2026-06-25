@@ -114,7 +114,7 @@ def _rsi_chart_svg(series) -> str:
     s = [x for x in (series or []) if x is not None][-20:]
     if len(s) < 2:
         return '<div style="font-size:11px;color:var(--text-muted);padding:8px 0;">RSI 데이터 부족</div>'
-    W, H, L, R, T, B = 700, 150, 34, 694, 12, 124
+    W, H, L, R, T, B = 600, 200, 34, 594, 14, 172
     n = len(s)
     X = lambda i: L + (R - L) * i / (n - 1)
     Y = lambda v: B - (B - T) * max(0, min(100, v)) / 100
@@ -136,8 +136,12 @@ def _rsi_chart_svg(series) -> str:
     cc = "#F87171" if cv >= 70 else "#4ADE80" if cv <= 30 else "#A78BFA"
     cur = (f'<circle cx="{X(n-1):.1f}" cy="{Y(cv):.1f}" r="4" fill="{cc}" stroke="#000" stroke-width="1"/>'
            f'<text x="{X(n-1):.1f}" y="{Y(cv)-7:.1f}" fill="{cc}" font-size="11" font-weight="700" text-anchor="end">{cv}</text>')
-    return (f'<svg viewBox="0 0 {W} {H}" style="width:100%;height:auto;display:block;margin:6px 0 2px;" xmlns="http://www.w3.org/2000/svg">'
-            f'{zones}{grid}<polyline points="{poly}" fill="none" stroke="#A78BFA" stroke-width="1.8" stroke-linejoin="round"/>{marks}{cur}</svg>')
+    # height:auto SVG가 모바일/인앱 브라우저에서 높이 0으로 접히는 문제 방지 →
+    # padding-bottom 비율 래퍼로 높이를 항상 확보 (모든 브라우저 호환)
+    svg = (f'<svg viewBox="0 0 {W} {H}" preserveAspectRatio="xMidYMid meet" '
+           f'style="position:absolute;top:0;left:0;width:100%;height:100%;display:block;" xmlns="http://www.w3.org/2000/svg">'
+           f'{zones}{grid}<polyline points="{poly}" fill="none" stroke="#A78BFA" stroke-width="1.8" stroke-linejoin="round"/>{marks}{cur}</svg>')
+    return (f'<div style="position:relative;width:100%;padding-bottom:{H/W*100:.1f}%;height:0;margin:6px 0 2px;">{svg}</div>')
 
 
 def _entry_forecast(tk, intra, et) -> str:
