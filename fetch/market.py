@@ -67,7 +67,7 @@ def _resample_120m(df60: pd.DataFrame) -> pd.DataFrame:
 
 def _options_pcr(t: yf.Ticker) -> Dict[str, Any]:
     """옵션 PCR + 만기별 Put/Call Wall + 심리 게이지 + 달러 플로우(추산)."""
-    exps = list(t.options[:3])
+    exps = list(t.options[:4])
     spot = None
     try:
         spot = float(t.fast_info.get("lastPrice"))

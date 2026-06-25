@@ -13,7 +13,10 @@ def default_analysis() -> Dict[str, Any]:
     return {
         "conclusion": {"text": "", "highlight": ""},
         "headline_metrics": {
-            "rsi_daily_label": "", "rsi_intraday_label": "", "macd_daily_label": "",
+            "rsi_daily_label": "", "rsi_daily_dir": "warn",
+            "rsi_intraday_label": "", "rsi_intraday_dir": "warn",
+            "macd_daily_label": "", "macd_daily_dir": "warn",
+            "score_note": "", "score_dir": "warn",
             "entry_zone": "", "exit_zone": "",
         },
         "daily": {
@@ -78,8 +81,11 @@ def coerce(raw: Dict[str, Any]) -> Dict[str, Any]:
 # 프롬프트에 넣을 JSON 형태 설명 (모델이 따라야 할 구조)
 JSON_SHAPE = """{
   "conclusion": {"text": "한 줄 핵심 결론", "highlight": "강조할 한 문장"},
-  "headline_metrics": {"rsi_daily_label": "예: 과매수 극단", "rsi_intraday_label": "...",
-                       "macd_daily_label": "예: Strong Buy", "entry_zone": "예: $48~50", "exit_zone": "예: $62~66"},
+  "headline_metrics": {"rsi_daily_label": "예: 과매수 극단", "rsi_daily_dir": "bull|warn|bear",
+                       "rsi_intraday_label": "예: 단기 과매도", "rsi_intraday_dir": "bull|warn|bear",
+                       "macd_daily_label": "예: Strong Buy", "macd_daily_dir": "bull|warn|bear",
+                       "score_note": "예: 전주 대비 상향", "score_dir": "bull|warn|bear",
+                       "entry_zone": "예: $48~50", "exit_zone": "예: $62~66"},
   "daily": {"ma_short": {"text":"5·20일 이평 해석","dir":"bull|warn|bear"}, "ma_mid": {"text":"100일","dir":"..."},
             "ma_long": {"text":"200일","dir":"..."}, "rsi": {"text":"RSI 해석(예: 과매수 극단 — 조정 경고)","dir":"bear"},
             "macd": {"text":"MACD 해석","dir":"bull"}, "bollinger": {"text":"볼린저 해석","dir":"warn"},

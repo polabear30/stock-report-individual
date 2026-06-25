@@ -258,13 +258,13 @@ def render_panel(meta: Dict[str, Any], market: Dict[str, Any],
 
     # ④ 파동/시나리오
     P.append(_section_title(4, "엘리어트 파동 / 시나리오"))
-    waves = a.get("waves", [])
+    waves = (a.get("waves", []) or [])[:5]
     if waves:
         ws = "".join(f'<div class="wave-seg{" current" if w.get("current") else ""}">'
                      f'<div class="wave-num"{" style=color:var(--accent-purple);" if w.get("current") else ""}>{esc(w.get("num",""))}</div>'
                      f'<div class="wave-range">{esc(w.get("range",""))}</div>'
-                     f'<div class="wave-desc">{esc(w.get("desc",""))}</div></div>' for w in waves[:3])
-        P.append(f'<div class="wave-row">{ws}</div>')
+                     f'<div class="wave-desc">{esc(w.get("desc",""))}</div></div>' for w in waves)
+        P.append(f'<div class="wave-row" style="grid-template-columns:repeat({len(waves)},1fr);">{ws}</div>')
     sc = "".join(f'<div class="scenario-row"><span class="scenario-label">{esc(s.get("label",""))}</span>'
                  f'<span class="scenario-pct {s.get("dir","")}">{_i(s.get("pct"))}%</span>'
                  f'<div class="scenario-bar"><div class="scenario-fill" style="width:{_i(s.get("pct"))}%;background:{_dir_color(s.get("dir"))};"></div></div></div>'
@@ -360,24 +360,47 @@ def _fmt_cap(v):
     return f"${v:.0f}"
 
 
+def _rec_dir(rec) -> str:
+    r = (rec or "").lower()
+    if "strong_buy" in r or "buy" in r:
+        return "bull"
+    if "sell" in r or "underperform" in r:
+        return "bear"
+    return "warn"
+
+
 def _metric_grid(d, intra, an, opt, hm, a, market, is_etf, meta) -> str:
     scr = a.get("scores", {})
+    total = _i(scr.get("total"))
+    score_dir = hm.get("score_dir") or ("bull" if total >= 70 else "warn" if total >= 50 else "bear")
+    # (label, val, sub, val_dir, sub_dir)
     cards = [
-        ("RSI · 일봉", _num(d.get("rsi")), hm.get("rsi_daily_label", "")),
-        ("RSI · 120분봉", _num(intra.get("rsi")), hm.get("rsi_intraday_label", "")),
-        ("AI 종합 점수", f'{_i(scr.get("total"))}점', "AI 산출"),
-        ("MACD · 일봉", _num(d.get("macd")), hm.get("macd_daily_label", "")),
-        ("예상 진입", hm.get("entry_zone", "—"), "AI 추정"),
-        ("예상 매도", hm.get("exit_zone", "—"), "AI 추정"),
+        ("RSI · 일봉", _num(d.get("rsi")), hm.get("rsi_daily_label", ""), hm.get("rsi_daily_dir", "warn"), hm.get("rsi_daily_dir", "warn")),
+        ("RSI · 120분봉", _num(intra.get("rsi")), hm.get("rsi_intraday_label", ""), hm.get("rsi_intraday_dir", "warn"), hm.get("rsi_intraday_dir", "warn")),
+        ("AI 종합 점수", f'{total}점', hm.get("score_note", "AI 산출"), score_dir, score_dir),
+        ("MACD · 일봉", _num(d.get("macd")), hm.get("macd_daily_label", ""), hm.get("macd_daily_dir", "warn"), hm.get("macd_daily_dir", "warn")),
+        ("예상 진입", hm.get("entry_zone", "—"), "AI 추정", "blue", "muted"),
+        ("예상 매도", hm.get("exit_zone", "—"), "AI 추정", "purple", "muted"),
     ]
     if is_etf:
-        cards += [("레버리지", f'{meta.get("leverage","3")}X', "일일 리밸런싱"), ("베타", _num((market.get("info") or {}).get("beta")), "변동성")]
+        cards += [("레버리지", f'{meta.get("leverage","3")}X', "일일 리밸런싱", "warn", "warn"),
+                  ("베타", _num((market.get("info") or {}).get("beta")), "변동성", "", "muted")]
     else:
-        cards += [("다음 어닝", market.get("earnings_date", "—"), "최대 변수"),
-                  ("애널 목표가", f'${_num(an.get("target_mean"))}', esc(an.get("recommendation") or ""))]
-    return '<div class="metric-grid" style="margin-top:4px;">' + "".join(
-        f'<div class="metric-card"><div class="lbl">{esc(l)}</div><div class="val">{esc(v)}</div>'
-        f'<div class="sub">{esc(s)}</div></div>' for l, v, s in cards) + '</div>'
+        cards += [("다음 어닝", market.get("earnings_date", "—"), "최대 변수", "orange", "warn"),
+                  ("애널 목표가", f'${_num(an.get("target_mean"))}', esc(an.get("recommendation") or ""),
+                   _rec_dir(an.get("recommendation")), _rec_dir(an.get("recommendation")))]
+
+    _C = {"bull": "var(--color-bull)", "bear": "var(--color-bear)", "warn": "var(--color-warning)",
+          "orange": "var(--color-orange)", "blue": "var(--accent-blue)", "purple": "var(--accent-purple)",
+          "muted": "var(--text-muted)", "": "var(--text-primary)"}
+    out = ""
+    for l, v, s, vd, sd in cards:
+        vc = _C.get(vd, "var(--text-primary)")
+        sc = _C.get(sd, "var(--text-muted)")
+        out += (f'<div class="metric-card"><div class="lbl">{esc(l)}</div>'
+                f'<div class="val" style="color:{vc};">{esc(v)}</div>'
+                f'<div class="sub" style="color:{sc};">{esc(s)}</div></div>')
+    return f'<div class="metric-grid" style="margin-top:4px;">{out}</div>'
 
 
 def _sentiment_section(a, an, market, last, is_etf) -> str:
@@ -486,8 +509,8 @@ def _pcr_section(opt: Dict[str, Any], a: Dict[str, Any]) -> str:
     </div>'''
 
     cards = ""
-    labels = ["1차 만기", "2차 만기", "3차 만기"]
-    for i, ex in enumerate(opt.get("per_exp", [])[:3]):
+    labels = ["1차 만기", "2차 만기", "3차 만기", "4차 만기"]
+    for i, ex in enumerate(opt.get("per_exp", [])[:4]):
         ec = _pcr_color(ex.get("pcr"))
         pp, cp = ex.get("put_pct") or 50, ex.get("call_pct") or 50
         cards += f'''
