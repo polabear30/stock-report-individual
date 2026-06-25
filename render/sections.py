@@ -1,4 +1,4 @@
-"""종목별 탭 패널 렌더 — 첨부 디자인의 클래스에 정확히 매핑"""
+"""종목별 탭 패널 렌더 — v2.11 디자인 충실 재현"""
 
 from __future__ import annotations
 
@@ -14,6 +14,13 @@ def _num(v, suffix=""):
     return f"{v}{suffix}" if v is not None else "—"
 
 
+def _i(v, default=0):
+    try:
+        return int(round(float(v)))
+    except (TypeError, ValueError):
+        return default
+
+
 def _score_color(s) -> str:
     try:
         s = float(s)
@@ -23,6 +30,8 @@ def _score_color(s) -> str:
 
 
 _DIR = {"bull": "var(--color-bull)", "warn": "var(--color-warning)", "bear": "var(--color-bear)"}
+_DIRRGBA = {"bull": "rgba(74,222,128,0.2)", "warn": "rgba(107,114,128,0.2)", "bear": "rgba(248,113,113,0.2)"}
+_DIRTEXT = {"bull": "var(--color-bull)", "warn": "var(--text-quaternary)", "bear": "var(--color-bear)"}
 
 
 def _dir_color(d) -> str:
@@ -42,6 +51,369 @@ def _sparkline(series: List[float], w=80, h=44) -> str:
             f'stroke-linejoin="round" stroke-linecap="round"/></svg>')
 
 
+def _section_title(num, name, sub="") -> str:
+    sub_html = f'<span class="section-sub">{esc(sub)}</span>' if sub else ""
+    style = ' style="background:linear-gradient(135deg,#B45309,#F59E0B);"' if str(num) == "11" else ""
+    return (f'<div class="section-title"><div class="section-num"{style}>{esc(num)}</div>'
+            f'<div class="section-name">{esc(name)}</div>{sub_html}</div>')
+
+
+def _row(label, value_html) -> str:
+    return f'<div class="row"><span class="row-label">{esc(label)}</span>{value_html}</div>'
+
+
+def _val(text, cls="") -> str:
+    return f'<span class="row-val {cls}" style="font-size:12px;">{esc(text)}</span>'
+
+
+def _tag(text, kind="warn") -> str:
+    return f'<span class="tag tag-{kind}">{esc(text)}</span>'
+
+
+# ── 진입 예상 타임라인 (ef-*) ────────────────────────────────────────────
+def _entry_forecast(tk, intra, et) -> str:
+    cur = intra.get("rsi")
+    cur_pct = max(0, min(100, cur if cur is not None else 50))
+    target = _i(et.get("target_rsi", 30), 30)
+    phase = et.get("phase", "wait")
+    steps = et.get("steps", []) or []
+    win = et.get("window", {}) or {}
+
+    step_html = ""
+    for s in steps[:4]:
+        lvl = s.get("level", "warn")
+        bl = ' style="border-left-color:rgba(74,222,128,0.4);"' if lvl == "bull" else ""
+        step_html += f'''
+        <div class="ef-step"{bl}>
+          <div class="ef-step-dot" style="background:{_dir_color(lvl)};"></div>
+          <div class="ef-step-content">
+            <div class="ef-step-title">{esc(s.get("title",""))}</div>
+            <div class="ef-step-desc">{esc(s.get("desc",""))}</div>
+          </div>
+          <span class="ef-step-date">{esc(s.get("date",""))}</span>
+        </div>'''
+
+    window_html = ""
+    if win.get("date") or win.get("price"):
+        window_html = f'''
+      <div class="ef-window">
+        <div><div class="ef-window-label">예상 진입 윈도우</div><div class="ef-window-date">{esc(win.get("date",""))}</div></div>
+        <div class="ef-window-divider"></div>
+        <div><div class="ef-window-label">예상 진입 가격</div><div class="ef-window-price" style="color:var(--accent-blue);">{esc(win.get("price",""))}</div></div>
+        <div class="ef-window-divider"></div>
+        <div class="ef-window-note">{esc(win.get("note",""))}</div>
+      </div>'''
+
+    return f'''
+    <div class="entry-forecast phase-{esc(phase)}">
+      <div class="ef-header">
+        <span class="ef-icon">🎯</span>
+        <span class="ef-title" style="color:var(--color-warning);">120분봉 RSI 진입 예상 타임라인 — {esc(tk)}</span>
+        <span class="ef-phase {esc(phase)}">{esc(et.get("phase_label",""))}</span>
+      </div>
+      <div class="ef-rsi-row">
+        <span class="ef-rsi-label">현재 RSI {_num(cur)}</span>
+        <div class="ef-rsi-track">
+          <div class="ef-rsi-fill" style="width:{cur_pct}%;background:linear-gradient(90deg,#4ADE80 30%,#FBBF24 60%,#F87171 80%);opacity:0.6;"></div>
+          <div class="ef-rsi-arrow" style="left:{target}%;right:{100-cur_pct}%;"></div>
+          <div class="ef-rsi-now" style="left:{cur_pct}%;background:var(--color-bear);"></div>
+          <div class="ef-rsi-target" style="left:{target}%;"></div>
+        </div>
+        <span class="ef-rsi-val" style="color:var(--color-bear);">{_num(cur)} → {target}</span>
+      </div>
+      <div class="ef-steps">{step_html}
+      </div>{window_html}
+    </div>'''
+
+
+# ── 메인 ──────────────────────────────────────────────────────────────────
+def render_panel(meta: Dict[str, Any], market: Dict[str, Any],
+                 a: Dict[str, Any], active: bool) -> str:
+    tk = meta["ticker"]
+    is_etf = meta.get("type") == "etf_leveraged"
+    d = market.get("daily", {}) or {}
+    intra = market.get("intraday_120m", {}) or {}
+    price = market.get("price", {}) or {}
+    info = market.get("info", {}) or {}
+    an = market.get("analyst", {}) or {}
+    opt = market.get("options", {}) or {}
+    hm = a.get("headline_metrics", {})
+    last = price.get("last") or d.get("last")
+    chg = price.get("chg_pct")
+    chg_cls = "price-bar-change-pos" if (chg or 0) >= 0 else "price-bar-change-neg"
+    arrow = "▲" if (chg or 0) >= 0 else "▼"
+    sign = "+" if (chg or 0) >= 0 else ""
+
+    P: List[str] = [f'<div class="tab-panel{" active" if active else ""}" id="panel-{tk.lower()}">']
+
+    # 가격 바
+    P.append(f'''
+    <div class="price-bar">
+      <div class="price-bar-candles">{_sparkline(market.get("series_daily"))}</div>
+      <div class="price-bar-info">
+        <div class="price-bar-ticker">{esc(tk)} · {esc(meta.get("name",""))} · {esc(meta.get("sector") or meta.get("underlying",""))}</div>
+        <div class="price-bar-main">
+          <span class="price-bar-close">${_num(last)}</span>
+          <span class="{chg_cls}">{arrow} {sign}{_num(chg)}%</span>
+        </div>
+        <div class="price-bar-sub">52주 ${_num(info.get("low_52w"))} ~ ${_num(info.get("high_52w"))} · 시총 {_fmt_cap(info.get("market_cap"))}</div>
+      </div>
+    </div>''')
+
+    # 진입 예상 타임라인
+    P.append(_entry_forecast(tk, intra, a.get("entry_timeline", {})))
+
+    # 최종 결론
+    cc = a.get("conclusion", {})
+    P.append(f'''
+    <div class="conclusion-box" style="margin-bottom:16px;">
+      <div class="conclusion-eyebrow">최종 결론</div>
+      <div class="conclusion-text">{esc(cc.get("text",""))}<br><span class="hl">{esc(cc.get("highlight",""))}</span></div>
+      <div class="conclusion-note">본 분석은 참고용이며 투자 권유가 아닙니다. 투자 판단과 책임은 본인에게 있습니다.</div>
+    </div>''')
+
+    # 메트릭 그리드 (8칸)
+    P.append(_metric_grid(d, intra, an, opt, hm, a, market, is_etf, meta))
+
+    # ① 일봉
+    dd = a.get("daily", {})
+    P.append(_section_title(1, "기술적 분석 · 일봉"))
+    P.append(f'''<div class="card">
+      {_row("단기 이평 (5·20일)", _val(dd.get("ma_short","")))}
+      {_row("중기 이평 (100일)", _val(dd.get("ma_mid","")))}
+      {_row("장기 이평 (200일)", _val(dd.get("ma_long","")))}
+      {_row("RSI (일봉)", f'<span style="display:flex;gap:8px;align-items:center;"><span class="row-val">{_num(d.get("rsi"))}</span>{_val(dd.get("rsi",""))}</span>')}
+      {_row("MACD (일봉)", _val(f'{_num(d.get("macd"))} · {dd.get("macd","")}'))}
+      {_row("볼린저밴드", _val(dd.get("bollinger","")))}
+      {_row("핵심 저항/지지", _val(dd.get("resistance","")))}
+      {_row("20일선 대비", _val(f'{_num(d.get("vs_sma20_pct"))}%'))}
+    </div>''')
+
+    # ② 120분봉
+    ia = a.get("intraday", {})
+    ir = ia.get("rows", {})
+    cr = ia.get("criteria", {})
+    cb = ia.get("combined", {})
+    P.append(_section_title(2, "기술적 분석 · 120분봉", "단기 트레이딩 핵심 타임프레임"))
+    if ia.get("info"):
+        P.append(f'<div class="info-box">{esc(ia["info"])}</div>')
+    ind = [("이동평균선", ir.get("ma", "")), ("RSI", _num(intra.get("rsi")), ir.get("rsi", "")),
+           ("스토캐스틱", _num(intra.get("stoch_k")), ir.get("stoch", "")), ("볼린저밴드", ir.get("bollinger", "")),
+           ("거래량", ir.get("volume", "")), ("MACD", _num(intra.get("macd")), ir.get("macd", ""))]
+    ind_html = ""
+    for item in ind:
+        if len(item) == 3:
+            n, v, sig = item
+        else:
+            n, v, sig = item[0], item[1], ""
+        ind_html += (f'<div class="ind-card"><div class="ind-name">{esc(n)}</div>'
+                     f'<div class="ind-val">{esc(v)}</div><div class="ind-sig">{esc(sig)}</div></div>')
+    P.append(f'<div class="ind-grid">{ind_html}</div>')
+    P.append(f'''<div class="card"><div class="card-title">120분봉 진입 타이밍 기준</div>
+      {_row("RSI 진입", _val(cr.get("rsi","")))}
+      {_row("스토캐스틱", _val(cr.get("stoch","")))}
+      {_row("볼린저밴드", _val(cr.get("bollinger","")))}
+      {_row("MACD", _val(cr.get("macd","")))}
+      {_row("예상 진입 타이밍", _tag(cr.get("entry","") or "—", "orange"))}
+    </div>''')
+    P.append(f'''<div class="summary-box"><div class="summary-label">일봉 + 120분봉 통합 판단</div>
+      <div class="grid2" style="gap:8px;">
+        <div style="background:var(--bg-card);border:1px solid var(--border-primary);border-radius:var(--radius-md);padding:12px;">
+          <div style="font-size:10px;color:var(--text-muted);margin-bottom:4px;">일봉</div>
+          <div style="font-size:13px;color:var(--color-bull);">{esc(cb.get("daily",""))}</div></div>
+        <div style="background:var(--bg-card);border:1px solid var(--border-primary);border-radius:var(--radius-md);padding:12px;">
+          <div style="font-size:10px;color:var(--text-muted);margin-bottom:4px;">120분봉</div>
+          <div style="font-size:13px;color:var(--color-bear);">{esc(cb.get("intraday",""))}</div></div>
+      </div>
+      <div class="summary-result">→ {esc(ia.get("summary",""))}</div></div>''')
+
+    # ③ 호재/리스크
+    P.append(_section_title(3, "기초지수 동인 / 구조 위험" if is_etf else "상승 이유 / 리스크"))
+    def _cr(items, kind):
+        rows = "".join(
+            f'<div class="row"><span class="row-label">{esc(it.get("title",""))}'
+            + (f'<br><span style="font-size:10px;color:var(--text-muted);">{esc(it.get("source",""))}</span>' if it.get("source") else "")
+            + f'</span>{_tag(it.get("tag",""), kind)}</div>' for it in (items or []))
+        return rows or '<div class="row"><span class="row-label" style="color:var(--text-muted);">근거 뉴스 없음</span></div>'
+    P.append(f'''<div class="grid2">
+      <div class="card"><div class="card-title" style="color:var(--color-bull);">{"상방 동인" if is_etf else "호재 카탈리스트"}</div>{_cr(a.get("catalysts"),"bull")}</div>
+      <div class="card"><div class="card-title" style="color:var(--color-bear);">리스크 요인</div>{_cr(a.get("risks"),"bear")}</div>
+    </div>''')
+    if is_etf:
+        etf = a.get("etf", {})
+        P.append(f'''<div class="card" style="border-top:3px solid var(--color-warning);margin-top:10px;">
+          <div class="card-title" style="color:var(--color-warning);">⚠ 레버리지 ETF 주의</div>
+          {_row("기초지수 방향", _val(etf.get("underlying_view","")))}
+          {_row("레버리지 소실(decay)", _val(etf.get("decay_warning","")))}
+          {_row("변동성", _val(etf.get("volatility","")))}
+          {_row("권장 보유기간", _val(etf.get("hold_period","")))}</div>''')
+
+    # ④ 파동/시나리오
+    P.append(_section_title(4, "엘리어트 파동 / 시나리오"))
+    waves = a.get("waves", [])
+    if waves:
+        ws = "".join(f'<div class="wave-seg{" current" if w.get("current") else ""}">'
+                     f'<div class="wave-num"{" style=color:var(--accent-purple);" if w.get("current") else ""}>{esc(w.get("num",""))}</div>'
+                     f'<div class="wave-range">{esc(w.get("range",""))}</div>'
+                     f'<div class="wave-desc">{esc(w.get("desc",""))}</div></div>' for w in waves[:3])
+        P.append(f'<div class="wave-row">{ws}</div>')
+    sc = "".join(f'<div class="scenario-row"><span class="scenario-label">{esc(s.get("label",""))}</span>'
+                 f'<span class="scenario-pct {s.get("dir","")}">{_i(s.get("pct"))}%</span>'
+                 f'<div class="scenario-bar"><div class="scenario-fill" style="width:{_i(s.get("pct"))}%;background:{_dir_color(s.get("dir"))};"></div></div></div>'
+                 for s in a.get("scenarios", []))
+    if sc:
+        P.append(f'<div class="card"><div class="card-title">향후 시나리오</div>{sc}</div>')
+
+    # ⑤ 전략
+    P.append(_section_title(5, "트레이딩 전략"))
+    st = a.get("strategy", {})
+    def _tr(items):
+        return "".join(f'<div class="trade-row"><span class="trade-label">{esc(i.get("label",""))}</span>'
+                       f'<span class="trade-val">{esc(i.get("price",""))}</span></div>' for i in (items or []))
+    P.append(f'''<div class="trade-grid">
+      <div class="trade-card"><div class="trade-card-title bull">▲ 매수 트리거</div>{_tr(st.get("buy"))}</div>
+      <div class="trade-card"><div class="trade-card-title bear">▼ 매도 / 손절</div>{_tr(st.get("sell"))}</div></div>''')
+
+    # ⑥ 점수
+    P.append(_section_title(6, "AI 종합 점수"))
+    scr = a.get("scores", {})
+    items = [("기술적 분석 (일봉)", scr.get("technical_daily")), ("기술적 분석 (120분봉)", scr.get("technical_intraday")),
+             ("수급", scr.get("supply")), ("기초지수 추세" if is_etf else "실적 / 펀더멘털", scr.get("fundamental")),
+             ("성장성", scr.get("growth"))]
+    sr = "".join(f'<div class="score-row"><span class="score-label">{esc(n)}</span>'
+                 f'<div class="score-bg"><div class="score-fill" style="width:{_i(v)}%;background:{_score_color(v)};"></div></div>'
+                 f'<span class="score-num">{_i(v)}</span></div>' for n, v in items)
+    P.append(f'<div class="card">{sr}<div class="score-total"><span class="score-total-label">종합 점수</span>'
+             f'<span class="score-total-val" style="color:{_score_color(scr.get("total"))};">{_i(scr.get("total"))}점</span></div></div>')
+
+    # ⑦ 손익
+    sim = a.get("simulation", {})
+    P.append(_section_title(7, "손익 시뮬레이션"))
+    cells = [("목표가", sim.get("target"), sim.get("target_pct"), "bull"), ("손절가", sim.get("stop"), sim.get("stop_pct"), "bear"),
+             ("손익비", sim.get("rr"), "", "warn"), ("권장 비중", sim.get("weight"), "", "")]
+    P.append('<div class="sim-grid">' + "".join(
+        f'<div class="sim-card"><div class="sim-label">{esc(l)}</div><div class="sim-val {c}">{esc(v or "—")}</div>'
+        f'<div class="sim-sub {c}">{esc(s)}</div></div>' for l, v, s, c in cells) + '</div>')
+
+    # ⑧ 확률
+    prob = a.get("probability", [])
+    if prob:
+        P.append(_section_title(8, "확률 분포"))
+        segs = "".join(f'<div class="prob-seg" style="width:{_i(p.get("pct"))}%;background:{_DIRRGBA.get(p.get("dir"),"rgba(107,114,128,0.2)")};color:{_DIRTEXT.get(p.get("dir"),"var(--text-quaternary)")};">{esc(p.get("label",""))} {_i(p.get("pct"))}%</div>' for p in prob)
+        leg = "".join(f'<div class="prob-legend-item"><div class="prob-dot" style="background:{_dir_color(p.get("dir"))};"></div>{esc(p.get("label",""))} {_i(p.get("pct"))}%</div>' for p in prob)
+        P.append(f'<div class="card"><div class="prob-bar">{segs}</div><div class="prob-legend">{leg}</div></div>')
+
+    # ⑨ 투자자별
+    P.append(_section_title(9, "투자자별 전략"))
+    inv = a.get("investor", [])
+    if isinstance(inv, dict):  # 구버전 호환
+        inv = [{"type": "공격형", "verdict": "", "verdict_dir": "bull", "detail": inv.get("aggressive", "")},
+               {"type": "중립형", "verdict": "", "verdict_dir": "warn", "detail": inv.get("neutral", "")},
+               {"type": "보수형", "verdict": "", "verdict_dir": "bear", "detail": inv.get("conservative", "")}]
+    ic = "".join(f'<div class="inv-card"><div class="inv-type">{esc(i.get("type",""))}</div>'
+                 f'<div class="inv-verdict {i.get("verdict_dir","warn")}">{esc(i.get("verdict",""))}</div>'
+                 f'<div class="inv-detail">{esc(i.get("detail",""))}</div></div>' for i in (inv or [])[:3])
+    P.append(f'<div class="inv-grid">{ic}</div>')
+
+    # ⑩ 심리/애널리스트
+    P.append(_section_title(10, "시장 심리 / 애널리스트"))
+    P.append(_sentiment_section(a, an, market, last, is_etf))
+
+    # 신뢰도
+    rel = a.get("reliability", {})
+    stars = _i(rel.get("stars", 3), 3)
+    star_html = "".join(
+        '<div class="rel-star" style="background:var(--color-bull);"></div>' if i < stars
+        else '<div class="rel-star" style="background:var(--bg-elevated);border:1px solid var(--border-primary);"></div>'
+        for i in range(5))
+    P.append(f'''<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:8px;">
+      <div><div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">데이터 신뢰도</div>
+      <div style="font-size:13px;color:var(--text-quaternary);">{esc(rel.get("note",""))}</div></div>
+      <div class="rel-stars">{star_html}</div></div>''')
+
+    # ⑪ PCR
+    P.append(_pcr_section(opt, a))
+
+    P.append('</div>')
+    return "".join(P)
+
+
+def _fmt_cap(v):
+    try:
+        v = float(v)
+    except (TypeError, ValueError):
+        return "—"
+    if v >= 1e12:
+        return f"${v/1e12:.1f}T"
+    if v >= 1e9:
+        return f"${v/1e9:.1f}B"
+    if v >= 1e6:
+        return f"${v/1e6:.0f}M"
+    return f"${v:.0f}"
+
+
+def _metric_grid(d, intra, an, opt, hm, a, market, is_etf, meta) -> str:
+    scr = a.get("scores", {})
+    cards = [
+        ("RSI · 일봉", _num(d.get("rsi")), hm.get("rsi_daily_label", "")),
+        ("RSI · 120분봉", _num(intra.get("rsi")), hm.get("rsi_intraday_label", "")),
+        ("AI 종합 점수", f'{_i(scr.get("total"))}점', "AI 산출"),
+        ("MACD · 일봉", _num(d.get("macd")), hm.get("macd_daily_label", "")),
+        ("예상 진입", hm.get("entry_zone", "—"), "AI 추정"),
+        ("예상 매도", hm.get("exit_zone", "—"), "AI 추정"),
+    ]
+    if is_etf:
+        cards += [("레버리지", f'{meta.get("leverage","3")}X', "일일 리밸런싱"), ("베타", _num((market.get("info") or {}).get("beta")), "변동성")]
+    else:
+        cards += [("다음 어닝", market.get("earnings_date", "—"), "최대 변수"),
+                  ("애널 목표가", f'${_num(an.get("target_mean"))}', esc(an.get("recommendation") or ""))]
+    return '<div class="metric-grid" style="margin-top:4px;">' + "".join(
+        f'<div class="metric-card"><div class="lbl">{esc(l)}</div><div class="val">{esc(v)}</div>'
+        f'<div class="sub">{esc(s)}</div></div>' for l, v, s in cards) + '</div>'
+
+
+def _sentiment_section(a, an, market, last, is_etf) -> str:
+    sd = a.get("sentiment_detail", {})
+    rows = []
+    # ① 소매 심리
+    rows.append(f'<div class="row"><span class="row-label">① 소매 심리</span>{_tag(sd.get("retail","—"), sd.get("retail_dir","warn"))}</div>')
+    n = 2
+    if not is_etf:
+        b, h, s = an.get("buy"), an.get("hold"), an.get("sell")
+        if b is not None or h is not None or s is not None:
+            b, h, s = b or 0, h or 0, s or 0
+            tot = (b + h + s) or 1
+            rows.append(f'''<div class="row"><span class="row-label">② 애널리스트 ({an.get("num_analysts") or tot}명)</span>
+              <span style="display:flex;gap:6px;align-items:center;">{_tag(f"Buy {b}","bull")}{_tag(f"Hold {h}","warn")}{_tag(f"Sell {s}","bear")}</span></div>
+              <div style="padding:2px 0 6px;"><div class="analyst-bar">
+                <div style="width:{b/tot*100:.0f}%;background:var(--color-bull);height:100%;border-radius:3px 0 0 3px;"></div>
+                <div style="width:{h/tot*100:.0f}%;background:var(--color-warning);height:100%;"></div>
+                <div style="width:{s/tot*100:.0f}%;background:var(--color-bear);height:100%;border-radius:0 3px 3px 0;"></div></div></div>''')
+            n = 3
+        tgt = an.get("target_mean")
+        vs = ""
+        if tgt and last:
+            pct = (tgt / last - 1) * 100
+            vs = f'<span style="font-size:11px;color:var(--text-muted);font-weight:400;">현재가 대비 {"+" if pct>=0 else ""}{pct:.1f}%</span>'
+        rows.append(f'<div class="row"><span class="row-label">{_circ(n)} 컨센서스 목표가</span><span class="row-val">${_num(tgt)} {vs}</span></div>')
+        n += 1
+    # 내부자
+    rows.append(f'<div class="row"><span class="row-label">{_circ(n)} 내부자 동향</span><span style="font-size:12px;color:var(--text-quaternary);">{esc(sd.get("insider","—"))}</span></div>')
+    n += 1
+    if not is_etf and market.get("earnings_date"):
+        rows.append(f'<div class="row"><span class="row-label">{_circ(n)} 다음 어닝</span>{_tag(market.get("earnings_date")+" ★","orange")}</div>')
+        n += 1
+    rows.append(f'<div class="row"><span class="row-label">{_circ(n)} 심리 요약</span><span style="font-size:12px;color:var(--text-quaternary);">{esc(sd.get("summary","—"))}</span></div>')
+    n += 1
+    rows.append(f'<div class="row"><span class="row-label">{_circ(n)} 주요 이슈 데드라인</span><span style="font-size:12px;color:var(--text-quaternary);">{esc(sd.get("deadline","—"))}</span></div>')
+    return f'<div class="card">{"".join(rows)}</div>'
+
+
+def _circ(n) -> str:
+    return "①②③④⑤⑥⑦⑧⑨"[n - 1] if 1 <= n <= 9 else str(n)
+
+
+# ── PCR 섹션 11 ────────────────────────────────────────────────────────────
 def _pcr_color(pcr) -> str:
     try:
         pcr = float(pcr)
@@ -65,314 +437,71 @@ def _pcr_interp(pcr) -> str:
 
 
 def _pcr_section(opt: Dict[str, Any], a: Dict[str, Any]) -> str:
-    """v2.11식 풋/콜 비율 섹션 (전체 PCR + 심리 게이지 + 플로우 + 만기별 Wall 카드)."""
     pcr = opt.get("pcr")
     gauge = opt.get("gauge_pct", 50)
     cd, pd = opt.get("call_dollar") or 0, opt.get("put_dollar") or 0
     col = _pcr_color(pcr)
 
     def _usd(v):
-        if v >= 1e6:
-            return f"${v/1e6:.1f}M"
-        if v >= 1e3:
-            return f"${v/1e3:.0f}K"
-        return f"${v:.0f}"
+        return f"${v/1e6:.1f}M" if v >= 1e6 else f"${v/1e3:.0f}K" if v >= 1e3 else f"${v:.0f}"
 
-    flow_txt = ""
-    if cd or pd:
-        if cd >= pd and pd > 0:
-            flow_txt = f"→ 기관 콜 우세 (콜 {cd/pd:.1f}배)"
-        elif pd > cd and cd > 0:
-            flow_txt = f"→ 기관 풋 우세 (풋 {pd/cd:.1f}배)"
+    flow = ""
+    if cd >= pd and pd > 0:
+        flow = f"→ 기관 콜 우세 (콜 {cd/pd:.1f}배)"
+    elif pd > cd and cd > 0:
+        flow = f"→ 기관 풋 우세 (풋 {pd/cd:.1f}배)"
     c_pct = round(cd / (cd + pd) * 100) if (cd + pd) else 50
-    p_pct = 100 - c_pct
 
     overall = f'''
     <div class="card" style="border-top:3px solid #F59E0B;margin-bottom:12px;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:12px;">
-        <div>
-          <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">전체 OI 기준 PCR</div>
+        <div><div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">전체 OI 기준 PCR</div>
           <div style="font-size:32px;font-weight:900;color:{col};">{_num(pcr)}</div>
-          <div style="font-size:11px;color:var(--text-muted);">{esc(_pcr_interp(pcr))}</div>
-        </div>
-        <div style="text-align:right;">
-          <div style="font-size:10px;color:var(--text-muted);margin-bottom:6px;">기관 옵션 플로우 (추산)</div>
+          <div style="font-size:11px;color:var(--text-muted);">{esc(_pcr_interp(pcr))}</div></div>
+        <div style="text-align:right;"><div style="font-size:10px;color:var(--text-muted);margin-bottom:6px;">기관 옵션 플로우 (추산)</div>
           <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end;">
             <div style="display:flex;align-items:center;gap:8px;"><span style="font-size:11px;color:var(--color-bear);">Put</span>
-              <div style="width:80px;height:10px;background:var(--bg-elevated);border-radius:3px;overflow:hidden;"><div style="width:{p_pct}%;height:100%;background:var(--color-bear);opacity:0.8;"></div></div>
+              <div style="width:80px;height:10px;background:var(--bg-elevated);border-radius:3px;overflow:hidden;"><div style="width:{100-c_pct}%;height:100%;background:var(--color-bear);opacity:0.8;"></div></div>
               <span style="font-size:11px;font-weight:700;color:var(--color-bear);">{_usd(pd)}</span></div>
             <div style="display:flex;align-items:center;gap:8px;"><span style="font-size:11px;color:var(--color-bull);">Call</span>
               <div style="width:80px;height:10px;background:var(--bg-elevated);border-radius:3px;overflow:hidden;"><div style="width:{c_pct}%;height:100%;background:var(--color-bull);opacity:0.8;"></div></div>
               <span style="font-size:11px;font-weight:700;color:var(--color-bull);">{_usd(cd)}</span></div>
-            <div style="font-size:10px;color:var(--color-bull);font-weight:700;margin-top:2px;">{esc(flow_txt)}</div>
-          </div>
-        </div>
+            <div style="font-size:10px;color:var(--color-bull);font-weight:700;margin-top:2px;">{esc(flow)}</div></div></div>
       </div>
       <div style="font-size:10px;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px;">PCR 심리 게이지</div>
       <div style="position:relative;height:20px;background:linear-gradient(90deg,#4ADE80,#FBBF24,#F87171);border-radius:10px;margin-bottom:4px;">
-        <div style="position:absolute;left:{gauge}%;top:-4px;width:4px;height:28px;background:white;border-radius:2px;box-shadow:0 0 6px rgba(0,0,0,0.5);"></div>
-      </div>
+        <div style="position:absolute;left:{gauge}%;top:-4px;width:4px;height:28px;background:white;border-radius:2px;box-shadow:0 0 6px rgba(0,0,0,0.5);"></div></div>
       <div style="display:flex;justify-content:space-between;margin-top:8px;">
         <span style="font-size:10px;color:var(--color-bull);">극단 강세 (0.5↓)</span>
         <span style="font-size:10px;color:var(--color-warning);">중립 (1.0)</span>
-        <span style="font-size:10px;color:var(--color-bear);">극단 약세 (2.0↑)</span>
-      </div>
+        <span style="font-size:10px;color:var(--color-bear);">극단 약세 (2.0↑)</span></div>
     </div>'''
 
-    # 만기별 카드
     cards = ""
     labels = ["1차 만기", "2차 만기", "3차 만기"]
     for i, ex in enumerate(opt.get("per_exp", [])[:3]):
-        epcr = ex.get("pcr")
-        ecol = _pcr_color(epcr)
+        ec = _pcr_color(ex.get("pcr"))
         pp, cp = ex.get("put_pct") or 50, ex.get("call_pct") or 50
         cards += f'''
-      <div class="card" style="border-top:3px solid {ecol};">
+      <div class="card" style="border-top:3px solid {ec};">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-          <div><div style="font-size:9px;color:var(--text-muted);text-transform:uppercase;">{esc(labels[i] if i < len(labels) else "만기")}</div>
+          <div><div style="font-size:9px;color:var(--text-muted);text-transform:uppercase;">{esc(labels[i] if i<len(labels) else "만기")}</div>
             <div style="font-size:13px;font-weight:800;">{esc(ex.get("exp",""))}</div></div>
           <div style="text-align:right;"><div style="font-size:9px;color:var(--text-muted);">PCR</div>
-            <div style="font-size:20px;font-weight:900;color:{ecol};">{_num(epcr)}</div></div>
-        </div>
+            <div style="font-size:20px;font-weight:900;color:{ec};">{_num(ex.get("pcr"))}</div></div></div>
         <div style="margin-bottom:8px;">
           <div style="display:flex;align-items:center;gap:5px;margin-bottom:3px;"><span style="font-size:10px;color:var(--text-muted);width:40px;">Put</span>
             <div style="flex:1;height:8px;background:var(--bg-elevated);border-radius:3px;overflow:hidden;"><div style="width:{pp}%;height:100%;background:var(--color-bear);opacity:0.7;"></div></div></div>
           <div style="display:flex;align-items:center;gap:5px;"><span style="font-size:10px;color:var(--text-muted);width:40px;">Call</span>
-            <div style="flex:1;height:8px;background:var(--bg-elevated);border-radius:3px;overflow:hidden;"><div style="width:{cp}%;height:100%;background:var(--color-bull);opacity:0.7;"></div></div></div>
-        </div>
-        {_row("Put Wall", f'<span class="tag tag-bear">${_num(ex.get("put_wall"))}</span>')}
-        {_row("Call Wall", f'<span class="tag tag-bull">${_num(ex.get("call_wall"))}</span>')}
-        <div class="row" style="border:none;"><span class="row-label">해석</span><span style="font-size:11px;color:var(--text-muted);">{esc(_pcr_interp(epcr))}</span></div>
+            <div style="flex:1;height:8px;background:var(--bg-elevated);border-radius:3px;overflow:hidden;"><div style="width:{cp}%;height:100%;background:var(--color-bull);opacity:0.7;"></div></div></div></div>
+        {_row("Put Wall", _tag(f'${_num(ex.get("put_wall"))}', "bear"))}
+        {_row("Call Wall", _tag(f'${_num(ex.get("call_wall"))}', "bull"))}
+        <div class="row" style="border:none;"><span class="row-label">해석</span><span style="font-size:11px;color:var(--text-muted);">{esc(_pcr_interp(ex.get("pcr")))}</span></div>
       </div>'''
-
-    comment = a.get("pcr_comment", "")
-    comment_html = (f'<div class="card" style="background:rgba(251,191,36,0.04);border-color:rgba(251,191,36,0.3);">'
-                    f'<div style="font-size:10px;color:var(--color-warning);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">PCR 종합 해석</div>'
-                    f'<div style="font-size:12px;color:var(--text-tertiary);">{esc(comment)}</div></div>') if comment else ""
-
     grid = f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">{cards}</div>' if cards else ""
-    return (_section_title(11, "풋/콜 비율 (Put/Call Ratio)", "옵션 OI 기준")
-            + overall + grid + comment_html)
 
-
-def _section_title(num, name, sub="") -> str:
-    sub_html = f'<span class="section-sub">{esc(sub)}</span>' if sub else ""
-    return (f'<div class="section-title"><div class="section-num">{esc(num)}</div>'
-            f'<div class="section-name">{esc(name)}</div>{sub_html}</div>')
-
-
-def _row(label, value_html) -> str:
-    return f'<div class="row"><span class="row-label">{esc(label)}</span>{value_html}</div>'
-
-
-def _val(text, cls="") -> str:
-    return f'<span class="row-val {cls}" style="font-size:12px;">{esc(text)}</span>'
-
-
-# ──────────────────────────────────────────────────────────────────────────
-def render_panel(meta: Dict[str, Any], market: Dict[str, Any],
-                 a: Dict[str, Any], active: bool) -> str:
-    tk = meta["ticker"]
-    is_etf = meta.get("type") == "etf_leveraged"
-    d = market.get("daily", {}) or {}
-    intra = market.get("intraday_120m", {}) or {}
-    price = market.get("price", {}) or {}
-    info = market.get("info", {}) or {}
-    an = market.get("analyst", {}) or {}
-    opt = market.get("options", {}) or {}
-    hm = a.get("headline_metrics", {})
-
-    last = price.get("last") or d.get("last")
-    chg = price.get("chg_pct")
-    chg_cls = "bull" if (chg or 0) > 0 else "bear" if (chg or 0) < 0 else ""
-    chg_sign = "+" if (chg or 0) > 0 else ""
-
-    parts: List[str] = []
-    parts.append(f'<div class="tab-panel{" active" if active else ""}" id="panel-{tk.lower()}">')
-
-    # ── 가격 바 ──
-    parts.append(f'''
-    <div class="price-bar">
-      <div class="price-bar-candles">{_sparkline(market.get("series_daily"))}</div>
-      <div style="flex:1;">
-        <div style="display:flex;align-items:baseline;gap:10px;">
-          <span style="font-size:22px;font-weight:900;color:var(--text-primary);">{esc(tk)}</span>
-          <span style="font-size:12px;color:var(--text-muted);">{esc(meta.get("name",""))} · {esc(meta.get("sector") or meta.get("underlying",""))}</span>
-        </div>
-        <div style="display:flex;align-items:baseline;gap:10px;margin-top:4px;">
-          <span style="font-size:24px;font-weight:800;color:var(--text-primary);">${_num(last)}</span>
-          <span class="{chg_cls}" style="font-size:14px;font-weight:700;">{chg_sign}{_num(chg)}%</span>
-        </div>
-      </div>
-    </div>''')
-
-    # ── 최종 결론 ──
-    concl = a.get("conclusion", {})
-    parts.append(f'''
-    <div class="conclusion-box" style="margin:12px 0;">
-      <div class="conclusion-eyebrow">최종 결론</div>
-      <div class="conclusion-text">{esc(concl.get("text",""))}<br><span class="hl">{esc(concl.get("highlight",""))}</span></div>
-      <div class="conclusion-note">본 분석은 참고용이며 투자 권유가 아닙니다. 투자 판단과 책임은 본인에게 있습니다.</div>
-    </div>''')
-
-    # ── 핵심 메트릭 ──
-    metric_cards = [
-        ("RSI · 일봉", _num(d.get("rsi")), hm.get("rsi_daily_label", "")),
-        ("RSI · 120분봉", _num(intra.get("rsi")), hm.get("rsi_intraday_label", "")),
-        ("AI 종합 점수", f'{a.get("scores",{}).get("total","—")}점', "AI 산출"),
-        ("MACD · 일봉", _num(d.get("macd")), hm.get("macd_daily_label", "")),
-        ("예상 진입", hm.get("entry_zone", "—"), "AI 추정"),
-        ("예상 매도", hm.get("exit_zone", "—"), "AI 추정"),
-    ]
-    if not is_etf:
-        metric_cards.append(("다음 어닝", market.get("earnings_date", "—"), "변수"))
-        metric_cards.append(("애널 목표가", f'${_num(an.get("target_mean"))}', esc(an.get("recommendation") or "")))
-    else:
-        metric_cards.append(("레버리지", f'{meta.get("leverage","3")}X', "일일 리밸런싱"))
-        metric_cards.append(("베타", _num(info.get("beta")), "변동성"))
-    cards_html = "".join(
-        f'<div class="metric-card"><div class="lbl">{esc(l)}</div>'
-        f'<div class="val">{esc(v)}</div><div class="sub">{esc(s)}</div></div>'
-        for l, v, s in metric_cards)
-    parts.append(f'<div class="metric-grid">{cards_html}</div>')
-
-    # ── ① 일봉 ──
-    dd = a.get("daily", {})
-    parts.append(_section_title(1, "기술적 분석 · 일봉"))
-    parts.append(f'''<div class="card">
-      {_row("단기 이평 (5·20일)", _val(dd.get("ma_short","")))}
-      {_row("중기 이평 (100일)", _val(dd.get("ma_mid","")))}
-      {_row("장기 이평 (200일)", _val(dd.get("ma_long","")))}
-      {_row("RSI (일봉)", f'<span style="display:flex;gap:8px;align-items:center;"><span class="row-val">{_num(d.get("rsi"))}</span>{_val(dd.get("rsi",""))}</span>')}
-      {_row("MACD (일봉)", _val(f'{_num(d.get("macd"))} · {dd.get("macd","")}'))}
-      {_row("볼린저밴드", _val(dd.get("bollinger","")))}
-      {_row("핵심 저항/지지", _val(dd.get("resistance","")))}
-      {_row("20일선 대비", _val(f'{_num(d.get("vs_sma20_pct"))}%'))}
-    </div>''')
-
-    # ── ② 120분봉 ──
-    ia = a.get("intraday", {})
-    ir = ia.get("rows", {})
-    parts.append(_section_title(2, "기술적 분석 · 120분봉", "단기 트레이딩 핵심"))
-    if ia.get("info"):
-        parts.append(f'<div class="info-box">{esc(ia["info"])}</div>')
-    ind = [("이동평균선", ir.get("ma", "")), ("RSI", f'{_num(intra.get("rsi"))} · {ir.get("rsi","")}'),
-           ("스토캐스틱", f'{_num(intra.get("stoch_k"))} · {ir.get("stoch","")}'),
-           ("볼린저밴드", ir.get("bollinger", "")), ("거래량", ir.get("volume", "")),
-           ("MACD", f'{_num(intra.get("macd"))} · {ir.get("macd","")}')]
-    ind_html = "".join(f'<div class="ind-card"><div class="ind-name">{esc(n)}</div>'
-                       f'<div class="ind-sig">{esc(v)}</div></div>' for n, v in ind)
-    parts.append(f'<div class="ind-grid">{ind_html}</div>')
-    if ia.get("summary"):
-        parts.append(f'<div class="summary-box"><div class="summary-label">일봉+120분봉 통합</div>'
-                     f'<div class="summary-result">→ {esc(ia["summary"])}</div></div>')
-
-    # ── ③ 호재/리스크 (ETF는 동인/구조위험) ──
-    parts.append(_section_title(3, "기초지수 동인 / 구조 위험" if is_etf else "호재 카탈리스트 / 리스크"))
-    def _catrisk(items, color):
-        rows = "".join(
-            f'<div class="row"><span class="row-label">{esc(it.get("title",""))}'
-            + (f'<br><span style="font-size:10px;color:var(--text-muted);">{esc(it.get("source",""))}</span>' if it.get("source") else "")
-            + f'</span><span class="tag tag-{color}">{esc(it.get("tag",""))}</span></div>'
-            for it in (items or []))
-        return rows or '<div class="row"><span class="row-label" style="color:var(--text-muted);">해당 근거 뉴스 없음</span></div>'
-    parts.append(f'''<div class="grid2">
-      <div class="card"><div class="card-title" style="color:var(--color-bull);">{"상방 동인" if is_etf else "호재 카탈리스트"}</div>{_catrisk(a.get("catalysts"), "bull")}</div>
-      <div class="card"><div class="card-title" style="color:var(--color-bear);">리스크 요인</div>{_catrisk(a.get("risks"), "bear")}</div>
-    </div>''')
-
-    # ETF: 레버리지 소실 경고 카드
-    if is_etf:
-        etf = a.get("etf", {})
-        parts.append(f'''<div class="card" style="border-top:3px solid var(--color-warning);margin-top:10px;">
-          <div class="card-title" style="color:var(--color-warning);">⚠ 레버리지 ETF 주의</div>
-          {_row("기초지수 방향", _val(etf.get("underlying_view","")))}
-          {_row("레버리지 소실(decay)", _val(etf.get("decay_warning","")))}
-          {_row("변동성", _val(etf.get("volatility","")))}
-          {_row("권장 보유기간", _val(etf.get("hold_period","")))}
-        </div>''')
-
-    # ── ④ 파동/시나리오 ──
-    parts.append(_section_title(4, "엘리어트 파동 / 시나리오"))
-    waves = a.get("waves", [])
-    if waves:
-        wseg = "".join(f'<div class="wave-seg{" current" if w.get("current") else ""}">'
-                       f'<div class="wave-num">{esc(w.get("num",""))}</div>'
-                       f'<div class="wave-range">{esc(w.get("range",""))}</div>'
-                       f'<div class="wave-desc">{esc(w.get("desc",""))}</div></div>' for w in waves[:3])
-        parts.append(f'<div class="wave-row">{wseg}</div>')
-    scen = "".join(
-        f'<div class="scenario-row"><span class="scenario-label">{esc(s.get("label",""))}</span>'
-        f'<span class="scenario-pct {s.get("dir","")}">{s.get("pct","")}%</span>'
-        f'<div class="scenario-bar"><div class="scenario-fill" style="width:{s.get("pct",0)}%;background:{_dir_color(s.get("dir"))};"></div></div></div>'
-        for s in a.get("scenarios", []))
-    if scen:
-        parts.append(f'<div class="card"><div class="card-title">향후 시나리오</div>{scen}</div>')
-
-    # ── ⑤ 트레이딩 전략 ──
-    parts.append(_section_title(5, "트레이딩 전략"))
-    strat = a.get("strategy", {})
-    def _trows(items):
-        return "".join(f'<div class="trade-row"><span class="trade-label">{esc(i.get("label",""))}</span>'
-                       f'<span class="trade-val">{esc(i.get("price",""))}</span></div>' for i in (items or []))
-    parts.append(f'''<div class="trade-grid">
-      <div class="trade-card"><div class="trade-card-title bull">▲ 매수 트리거</div>{_trows(strat.get("buy"))}</div>
-      <div class="trade-card"><div class="trade-card-title bear">▼ 매도 / 손절</div>{_trows(strat.get("sell"))}</div>
-    </div>''')
-
-    # ── ⑥ AI 종합점수 ──
-    parts.append(_section_title(6, "AI 종합 점수"))
-    sc = a.get("scores", {})
-    score_items = [("기술 (일봉)", sc.get("technical_daily")), ("기술 (120분봉)", sc.get("technical_intraday")),
-                   ("수급", sc.get("supply")),
-                   ("기초지수 추세" if is_etf else "펀더멘털", sc.get("fundamental")), ("성장성", sc.get("growth"))]
-    srows = "".join(f'<div class="score-row"><span class="score-label">{esc(n)}</span>'
-                    f'<div class="score-bg"><div class="score-fill" style="width:{v or 0}%;background:{_score_color(v)};"></div></div>'
-                    f'<span class="score-num">{v if v is not None else "—"}</span></div>' for n, v in score_items)
-    parts.append(f'<div class="card">{srows}<div class="score-total"><span class="score-total-label">종합 점수</span>'
-                 f'<span class="score-total-val">{sc.get("total","—")}점</span></div></div>')
-
-    # ── ⑦ 손익 시뮬 ──
-    sim = a.get("simulation", {})
-    parts.append(_section_title(7, "손익 시뮬레이션"))
-    sim_cells = [("목표가", sim.get("target"), sim.get("target_pct"), "bull"),
-                 ("손절가", sim.get("stop"), sim.get("stop_pct"), "bear"),
-                 ("손익비", sim.get("rr"), "", "warn"), ("권장 비중", sim.get("weight"), "눌림 후", "")]
-    sim_html = "".join(f'<div class="sim-card"><div class="sim-label">{esc(l)}</div>'
-                       f'<div class="sim-val {c}">{esc(v or "—")}</div><div class="sim-sub {c}">{esc(s)}</div></div>'
-                       for l, v, s, c in sim_cells)
-    parts.append(f'<div class="sim-grid">{sim_html}</div>')
-
-    # ── ⑧ 확률 분포 ──
-    prob = a.get("probability", [])
-    if prob:
-        parts.append(_section_title(8, "확률 분포"))
-        segs = "".join(f'<div class="prob-seg" style="width:{p.get("pct",0)}%;background:{_dir_color(p.get("dir"))};color:#0B0D12;">{p.get("pct","")}%</div>' for p in prob)
-        legend = "".join(f'<div class="prob-legend-item"><span style="width:10px;height:10px;border-radius:2px;background:{_dir_color(p.get("dir"))};display:inline-block;"></span>{esc(p.get("label",""))}</div>' for p in prob)
-        parts.append(f'<div class="card"><div class="prob-bar">{segs}</div><div class="prob-legend">{legend}</div></div>')
-
-    # ── ⑨ 투자자별 전략 ──
-    inv = a.get("investor", {})
-    parts.append(_section_title(9, "투자자별 전략"))
-    parts.append(f'''<div class="grid3">
-      <div class="card"><div class="card-title bull">공격형</div><div style="font-size:12px;color:var(--text-tertiary);">{esc(inv.get("aggressive",""))}</div></div>
-      <div class="card"><div class="card-title warn">중립형</div><div style="font-size:12px;color:var(--text-tertiary);">{esc(inv.get("neutral",""))}</div></div>
-      <div class="card"><div class="card-title" style="color:var(--accent-blue);">보수형</div><div style="font-size:12px;color:var(--text-tertiary);">{esc(inv.get("conservative",""))}</div></div>
-    </div>''')
-
-    # ── ⑩ 시장심리 / 애널리스트 ──
-    parts.append(_section_title(10, "시장 심리 / 애널리스트"))
-    analyst_rows = ""
-    if not is_etf:
-        analyst_rows = (
-            _row("애널리스트 목표가", _val(f'평균 ${_num(an.get("target_mean"))} (최고 ${_num(an.get("target_high"))} / 최저 ${_num(an.get("target_low"))})'))
-            + _row("투자의견", f'<span class="tag tag-bull">{esc(an.get("recommendation") or "—")}</span> <span class="row-val" style="font-size:12px;">{_num(an.get("num_analysts"))}명</span>'))
-    parts.append(f'''<div class="card">{analyst_rows}
-      <div style="font-size:12px;color:var(--text-tertiary);margin-top:8px;">{esc(a.get("sentiment",""))}</div>
-    </div>''')
-
-    # ── ⑪ 풋/콜 비율 (v2.11 반영) ──
-    parts.append(_pcr_section(opt, a))
-
-    parts.append('</div>')  # /tab-panel
-    return "".join(parts)
+    cm = a.get("pcr_comment", "")
+    cm_html = (f'<div class="card" style="background:rgba(251,191,36,0.04);border-color:rgba(251,191,36,0.3);">'
+               f'<div style="font-size:10px;color:var(--color-warning);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">PCR 종합 해석</div>'
+               f'<div style="font-size:12px;color:var(--text-tertiary);">{esc(cm)}</div></div>') if cm else ""
+    return _section_title(11, "풋/콜 비율 (Put/Call Ratio)", "옵션 OI 기준") + overall + grid + cm_html

@@ -39,7 +39,15 @@ def build_messages(context: Dict[str, Any], ticker_type: str) -> Dict[str, str]:
 {task}
 
 위 데이터/뉴스에만 근거해, 아래 JSON 구조에 맞춰 한국어로 채워라.
-숫자 점수(scores, scenarios.pct, probability.pct)는 정수. scenarios.dir/probability.dir은 bull|warn|bear 중 하나.
+
+[완결성 규칙 — 빈 칸 금지]
+- 모든 필드를 채운다. waves 정확히 3개, scenarios 3개(pct 합=100), probability 3개(pct 합=100),
+  strategy.buy 3~4개·strategy.sell 3~4개, entry_timeline.steps 정확히 4개(현재→1차→2차→진입구간),
+  investor 3개(신규/보유/장기), pcr_comment 필수 작성.
+- entry_timeline은 120분봉 RSI가 목표(보통 30)까지 가는 단계별 예상 경로를 단계마다 RSI·가격·소요 캔들 추정으로.
+- 숫자 점수(scores, *.pct, target_rsi, reliability.stars)는 정수. dir/level/verdict_dir은 bull|warn|bear 중 하나.
+- 예시에 적힌 숫자(예: 64, 40)를 그대로 복사하지 말고, 데이터에 근거해 종목마다 다르게 산출.
+- 근거가 약한 항목도 비우지 말고 보수적으로 기술(단, 없는 사건·수치는 날조 금지).
 순수 JSON만 출력:
 
 {JSON_SHAPE}"""

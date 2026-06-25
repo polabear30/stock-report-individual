@@ -164,13 +164,25 @@ def fetch_stock_data(ticker: str) -> Dict[str, Any]:
             "low_52w": _r(info.get("fiftyTwoWeekLow")),
             "beta": _r(info.get("beta")),
         }
-        result["analyst"] = {
+        analyst = {
             "target_mean": _r(info.get("targetMeanPrice")),
             "target_high": _r(info.get("targetHighPrice")),
             "target_low": _r(info.get("targetLowPrice")),
             "recommendation": info.get("recommendationKey"),
             "num_analysts": info.get("numberOfAnalystOpinions"),
+            "buy": None, "hold": None, "sell": None,
         }
+        # Buy/Hold/Sell 분포 (yfinance recommendations)
+        try:
+            rec = t.recommendations
+            if rec is not None and len(rec) > 0:
+                row = rec.iloc[0]
+                analyst["buy"] = int(row.get("strongBuy", 0)) + int(row.get("buy", 0))
+                analyst["hold"] = int(row.get("hold", 0))
+                analyst["sell"] = int(row.get("sell", 0)) + int(row.get("strongSell", 0))
+        except Exception:
+            pass
+        result["analyst"] = analyst
     except Exception as e:
         result["errors"].append(f"info:{e}")
 
