@@ -24,13 +24,14 @@ def _call_openai(msgs: Dict[str, str]) -> Dict[str, Any]:
     from openai import OpenAI
     client = OpenAI()  # OPENAI_API_KEY 환경변수 사용
     model = os.environ.get("OPENAI_MODEL", "gpt-4o")
+    # 신형 모델(gpt-5.x)은 max_completion_tokens 사용 + temperature 기본값만 허용 →
+    # 호환되도록 max_completion_tokens 사용, temperature 미지정(기본값).
     resp = client.chat.completions.create(
         model=model,
         messages=[{"role": "system", "content": msgs["system"]},
                   {"role": "user", "content": msgs["user"]}],
         response_format={"type": "json_object"},
-        temperature=0.4,
-        max_tokens=4096,
+        max_completion_tokens=16000,
     )
     return _extract_json(resp.choices[0].message.content)
 
