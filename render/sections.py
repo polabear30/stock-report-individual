@@ -70,6 +70,14 @@ def _tag(text, kind="warn") -> str:
     return f'<span class="tag tag-{kind}">{esc(text)}</span>'
 
 
+def _tagval(field, fallback="warn") -> str:
+    """문자열이면 평문 row-val, {text,dir}면 컬러 태그로 렌더 (v2.11식)."""
+    if isinstance(field, dict):
+        t = field.get("text") or field.get("val") or ""
+        return _tag(t, field.get("dir") or fallback) if t else _val("")
+    return _val(field)
+
+
 # ── 진입 예상 타임라인 (ef-*) ────────────────────────────────────────────
 def _entry_forecast(tk, intra, et) -> str:
     cur = intra.get("rsi")
@@ -179,13 +187,13 @@ def render_panel(meta: Dict[str, Any], market: Dict[str, Any],
     dd = a.get("daily", {})
     P.append(_section_title(1, "기술적 분석 · 일봉"))
     P.append(f'''<div class="card">
-      {_row("단기 이평 (5·20일)", _val(dd.get("ma_short","")))}
-      {_row("중기 이평 (100일)", _val(dd.get("ma_mid","")))}
-      {_row("장기 이평 (200일)", _val(dd.get("ma_long","")))}
-      {_row("RSI (일봉)", f'<span style="display:flex;gap:8px;align-items:center;"><span class="row-val">{_num(d.get("rsi"))}</span>{_val(dd.get("rsi",""))}</span>')}
-      {_row("MACD (일봉)", _val(f'{_num(d.get("macd"))} · {dd.get("macd","")}'))}
-      {_row("볼린저밴드", _val(dd.get("bollinger","")))}
-      {_row("핵심 저항/지지", _val(dd.get("resistance","")))}
+      {_row("단기 이평 (5·20일)", _tagval(dd.get("ma_short")))}
+      {_row("중기 이평 (100일)", _tagval(dd.get("ma_mid")))}
+      {_row("장기 이평 (200일)", _tagval(dd.get("ma_long")))}
+      {_row("RSI (일봉)", f'<span style="display:flex;gap:8px;align-items:center;"><span class="row-val">{_num(d.get("rsi"))}</span>{_tagval(dd.get("rsi"))}</span>')}
+      {_row("MACD (일봉)", f'<span style="display:flex;gap:8px;align-items:center;"><span class="row-val">{_num(d.get("macd"))}</span>{_tagval(dd.get("macd"))}</span>')}
+      {_row("볼린저밴드", _tagval(dd.get("bollinger")))}
+      {_row("핵심 저항/지지", _tagval(dd.get("resistance")))}
       {_row("20일선 대비", _val(f'{_num(d.get("vs_sma20_pct"))}%'))}
     </div>''')
 
@@ -197,17 +205,17 @@ def render_panel(meta: Dict[str, Any], market: Dict[str, Any],
     P.append(_section_title(2, "기술적 분석 · 120분봉", "단기 트레이딩 핵심 타임프레임"))
     if ia.get("info"):
         P.append(f'<div class="info-box">{esc(ia["info"])}</div>')
-    ind = [("이동평균선", ir.get("ma", "")), ("RSI", _num(intra.get("rsi")), ir.get("rsi", "")),
-           ("스토캐스틱", _num(intra.get("stoch_k")), ir.get("stoch", "")), ("볼린저밴드", ir.get("bollinger", "")),
-           ("거래량", ir.get("volume", "")), ("MACD", _num(intra.get("macd")), ir.get("macd", ""))]
     ind_html = ""
-    for item in ind:
-        if len(item) == 3:
-            n, v, sig = item
+    for label, key in [("이동평균선", "ma"), ("RSI", "rsi"), ("스토캐스틱", "stoch"),
+                       ("볼린저밴드", "bollinger"), ("거래량", "volume"), ("MACD", "macd")]:
+        cell = ir.get(key, {})
+        if isinstance(cell, dict):
+            val, dirc, sig = cell.get("val", ""), cell.get("dir", "warn"), cell.get("sig", "")
         else:
-            n, v, sig = item[0], item[1], ""
-        ind_html += (f'<div class="ind-card"><div class="ind-name">{esc(n)}</div>'
-                     f'<div class="ind-val">{esc(v)}</div><div class="ind-sig">{esc(sig)}</div></div>')
+            val, dirc, sig = cell, "warn", ""
+        ind_html += (f'<div class="ind-card"><div class="ind-name">{esc(label)}</div>'
+                     f'<div class="ind-val" style="color:{_dir_color(dirc)};">{esc(val)}</div>'
+                     f'<div class="ind-sig">{esc(sig)}</div></div>')
     P.append(f'<div class="ind-grid">{ind_html}</div>')
     P.append(f'''<div class="card"><div class="card-title">120분봉 진입 타이밍 기준</div>
       {_row("RSI 진입", _val(cr.get("rsi","")))}
