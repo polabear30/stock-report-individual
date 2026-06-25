@@ -1,10 +1,10 @@
 name: 개별 종목 AI 리포트
 
-# 06:45 KST = 21:45 UTC (전날). GitHub cron은 정시(:00)에 혼잡·지연·누락이 잦아
-# 정시를 피하고 7시 전에 끝나도록 버퍼를 둠(실행 ~3-4분 + 지연 감안).
+# 06:30 KST = 21:30 UTC (전날). GitHub cron은 best-effort(정시 보장 X)라 정시를 피하고
+# 7시 전에 여유있게 끝나도록 6:30 실행.
 on:
   schedule:
-    - cron: "45 21 * * *"
+    - cron: "30 21 * * *"
   workflow_dispatch: {}
 
 permissions:
