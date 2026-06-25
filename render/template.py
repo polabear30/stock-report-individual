@@ -53,6 +53,9 @@ def render_report(panels: List[Dict[str, Any]], gen_time: str, status: Dict[str,
 <body>
 <header class="top-header">
 <div class="header-inner">
+  <div style="font-size:11px;color:var(--text-quaternary);letter-spacing:0.3px;margin-bottom:4px;">
+    © 전세영 &nbsp;·&nbsp; <a href="mailto:coolboy30a@naver.com" style="color:var(--text-quaternary);text-decoration:none;">coolboy30a@naver.com</a>
+  </div>
   <div style="font-size:10px;color:var(--text-muted);letter-spacing:0.3px;margin-bottom:6px;">
     AI 분석 리포트 · 매일 자동 생성 · 참고용(투자권유 아님)
   </div>
