@@ -78,84 +78,96 @@ def _tagval(field, fallback="warn") -> str:
     return _val(field)
 
 
-# ── 진입 예상 타임라인 (ef-*) ────────────────────────────────────────────
-def _phase_from_rsi(cur, prev=None, rmin=None):
-    """120분봉 RSI '값 + 방향 + 최근 저점'으로 진입 단계 판정 (데이터 기반).
+# ── 120분봉 RSI 시그널 + 차트 (ef-*) ─────────────────────────────────────
+def _rsi_signal(series):
+    """120분봉 RSI 시계열에서 '30/70 터치 + 방향 전환'을 핵심 시그널로 판정.
 
-    핵심: 이미 과매도(<=~32)를 찍고 반등 중이면 '진입 임박'이 아니라 '상승 전환'.
+    반환: (라벨, 색상, 강조여부)
     """
-    if cur is None:
-        return ("wait", "데이터 부족")
-    rising = prev is not None and cur > prev + 0.5
-    falling = prev is not None and cur < prev - 0.5
-    # ① 과매도 저점 찍고 반등 → 상승 추세 전환
-    if rmin is not None and rmin <= 32 and rising and cur >= rmin + 3:
-        return ("hot", "상승 전환")
-    # ② 과열
+    s = [x for x in (series or []) if x is not None]
+    if len(s) < 3:
+        return ("데이터 부족", "var(--text-muted)", False)
+    cur, prv = s[-1], s[-2]
+    win = s[-6:]                      # 최근 6봉(≈12시간)
+    mn, mx = min(win), max(win)
+    rising = cur > prv
+    GREEN, RED, YEL, GRAY = "var(--color-bull)", "var(--color-bear)", "var(--color-warning)", "var(--text-muted)"
+    # 70 터치 후 하락 전환 → 매도 시그널
+    if mx >= 70 and cur < 70 and not rising:
+        return ("과열 후 하락 — 매도 시그널", RED, True)
+    # 30 터치 후 반등 → 매수 시그널
+    if mn <= 30 and cur > 30 and rising:
+        return ("과매도 후 반등 — 매수 시그널", GREEN, True)
     if cur >= 70:
-        return ("wait", "조정 대기")
-    # ③ 과매도권
-    if cur <= 35:
-        return ("hot", "반등 시작" if rising else "진입 적기")
-    # ④ 중립권 — 방향에 따라
-    if cur <= 55:
-        return ("near", "반등 진행" if rising else "진입 임박")
-    # ⑤ 중상단
-    return ("near", "관망") if rising else ("wait", "조정 진행")
+        return ("과매수권 — 조정 임박", RED, False)
+    if cur <= 30:
+        return ("과매도권 — 반등 대기", GREEN, False)
+    if cur >= 60 and rising:
+        return ("과매수 접근 중", YEL, False)
+    if cur <= 40 and not rising:
+        return ("과매도 접근 중", YEL, False)
+    return ("상승 진행" if rising else "하락 진행", GREEN if rising else GRAY, False)
+
+
+def _rsi_chart_svg(series) -> str:
+    """최근 20봉(120분) RSI 라인차트 — 30/50/70 기준선 + 터치 지점 마커."""
+    s = [x for x in (series or []) if x is not None][-20:]
+    if len(s) < 2:
+        return '<div style="font-size:11px;color:var(--text-muted);padding:8px 0;">RSI 데이터 부족</div>'
+    W, H, L, R, T, B = 700, 150, 34, 694, 12, 124
+    n = len(s)
+    X = lambda i: L + (R - L) * i / (n - 1)
+    Y = lambda v: B - (B - T) * max(0, min(100, v)) / 100
+    # 과열/과매도 영역
+    zones = (f'<rect x="{L}" y="{Y(100):.1f}" width="{R-L}" height="{Y(70)-Y(100):.1f}" fill="#F87171" opacity="0.07"/>'
+             f'<rect x="{L}" y="{Y(30):.1f}" width="{R-L}" height="{Y(0)-Y(30):.1f}" fill="#4ADE80" opacity="0.07"/>')
+    grid = ""
+    for lvl, col in [(70, "#F87171"), (50, "#6B7280"), (30, "#4ADE80")]:
+        y = Y(lvl)
+        grid += (f'<line x1="{L}" y1="{y:.1f}" x2="{R}" y2="{y:.1f}" stroke="{col}" stroke-width="1" stroke-dasharray="3 3" opacity="0.5"/>'
+                 f'<text x="{L-4}" y="{y+3:.1f}" fill="{col}" font-size="9" text-anchor="end">{lvl}</text>')
+    poly = " ".join(f"{X(i):.1f},{Y(v):.1f}" for i, v in enumerate(s))
+    marks = ""
+    for i, v in enumerate(s):
+        if v <= 30 or v >= 70:   # 터치 지점 강조
+            c = "#4ADE80" if v <= 30 else "#F87171"
+            marks += f'<circle cx="{X(i):.1f}" cy="{Y(v):.1f}" r="2.6" fill="{c}"/>'
+    cv = s[-1]
+    cc = "#F87171" if cv >= 70 else "#4ADE80" if cv <= 30 else "#A78BFA"
+    cur = (f'<circle cx="{X(n-1):.1f}" cy="{Y(cv):.1f}" r="4" fill="{cc}" stroke="#000" stroke-width="1"/>'
+           f'<text x="{X(n-1):.1f}" y="{Y(cv)-7:.1f}" fill="{cc}" font-size="11" font-weight="700" text-anchor="end">{cv}</text>')
+    return (f'<svg viewBox="0 0 {W} {H}" style="width:100%;height:auto;display:block;margin:6px 0 2px;" xmlns="http://www.w3.org/2000/svg">'
+            f'{zones}{grid}<polyline points="{poly}" fill="none" stroke="#A78BFA" stroke-width="1.8" stroke-linejoin="round"/>{marks}{cur}</svg>')
 
 
 def _entry_forecast(tk, intra, et) -> str:
+    series = intra.get("rsi_series") or []
     cur = intra.get("rsi")
-    cur_pct = max(0, min(100, cur if cur is not None else 50))
-    target = _i(et.get("target_rsi", 30), 30)
-    # 데이터 기반(값+방향+저점) — AI phase 무시
-    phase, phase_label = _phase_from_rsi(cur, intra.get("rsi_prev"), intra.get("rsi_min"))
-    steps = et.get("steps", []) or []
+    label, color, hot = _rsi_signal(series)
     win = et.get("window", {}) or {}
-
-    step_html = ""
-    for s in steps[:4]:
-        lvl = s.get("level", "warn")
-        bl = ' style="border-left-color:rgba(74,222,128,0.4);"' if lvl == "bull" else ""
-        step_html += f'''
-        <div class="ef-step"{bl}>
-          <div class="ef-step-dot" style="background:{_dir_color(lvl)};"></div>
-          <div class="ef-step-content">
-            <div class="ef-step-title">{esc(s.get("title",""))}</div>
-            <div class="ef-step-desc">{esc(s.get("desc",""))}</div>
-          </div>
-          <span class="ef-step-date">{esc(s.get("date",""))}</span>
-        </div>'''
 
     window_html = ""
     if win.get("date") or win.get("price"):
         window_html = f'''
       <div class="ef-window">
-        <div><div class="ef-window-label">예상 진입 윈도우</div><div class="ef-window-date">{esc(win.get("date",""))}</div></div>
+        <div><div class="ef-window-label">대응 시나리오</div><div class="ef-window-date">{esc(win.get("date",""))}</div></div>
         <div class="ef-window-divider"></div>
-        <div><div class="ef-window-label">예상 진입 가격</div><div class="ef-window-price" style="color:var(--accent-blue);">{esc(win.get("price",""))}</div></div>
+        <div><div class="ef-window-label">관심 가격대</div><div class="ef-window-price" style="color:var(--accent-blue);">{esc(win.get("price",""))}</div></div>
         <div class="ef-window-divider"></div>
         <div class="ef-window-note">{esc(win.get("note",""))}</div>
       </div>'''
 
     return f'''
-    <div class="entry-forecast phase-{esc(phase)}">
+    <div class="entry-forecast">
       <div class="ef-header">
-        <span class="ef-icon">🎯</span>
-        <span class="ef-title" style="color:var(--color-warning);">120분봉 RSI 진입 예상 타임라인 — {esc(tk)}</span>
-        <span class="ef-phase {esc(phase)}">{esc(phase_label)}</span>
+        <span class="ef-icon">📈</span>
+        <span class="ef-title" style="color:var(--color-warning);">120분봉 RSI 시그널 — {esc(tk)}</span>
+        <span class="ef-phase" style="background:{color}22;color:{color};border:1px solid {color}55;">{esc(label)}</span>
       </div>
-      <div class="ef-rsi-row">
-        <span class="ef-rsi-label">현재 RSI {_num(cur)}</span>
-        <div class="ef-rsi-track">
-          <div class="ef-rsi-fill" style="width:{cur_pct}%;background:linear-gradient(90deg,#4ADE80 30%,#FBBF24 60%,#F87171 80%);opacity:0.6;"></div>
-          <div class="ef-rsi-arrow" style="left:{target}%;right:{100-cur_pct}%;"></div>
-          <div class="ef-rsi-now" style="left:{cur_pct}%;background:var(--color-bear);"></div>
-          <div class="ef-rsi-target" style="left:{target}%;"></div>
-        </div>
-        <span class="ef-rsi-val" style="color:var(--color-bear);">{_num(cur)} → {target}</span>
-      </div>
-      <div class="ef-steps">{step_html}
+      {_rsi_chart_svg(series)}
+      <div style="font-size:10px;color:var(--text-muted);text-align:right;margin-bottom:8px;">
+        최근 20봉 · 프리장·정규장·애프터장 포함 · 현재 RSI {_num(cur)}
+        &nbsp;|&nbsp; 🟢30 터치·반등=매수 / 🔴70 터치·하락=매도
       </div>{window_html}
     </div>'''
 

@@ -38,6 +38,12 @@ def build_messages(context: Dict[str, Any], ticker_type: str) -> Dict[str, str]:
 [작업 지시]
 {task}
 
+[120분봉 RSI 핵심 시그널 — 반드시 이 관점으로 분석]
+- market.intraday_120m.rsi_series(최근 20봉 RSI)를 근거로 120분봉 분석·결론을 작성한다.
+- RSI가 30 이하를 '터치 후 반등'하면 매수 시그널, 70 이상을 '터치 후 하락'하면 매도 시그널로 해석한다.
+- 현재 RSI 값뿐 아니라 '최근 저점/고점을 찍고 올라가는지/내려가는지(방향)'를 중심으로 서술한다.
+- intraday.rows/criteria/combined, conclusion, scenarios가 이 RSI 시그널과 모순되지 않게 한다.
+
 위 데이터/뉴스에만 근거해, 아래 JSON 구조에 맞춰 한국어로 채워라.
 
 [완결성 규칙 — 빈 칸 금지]
