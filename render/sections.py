@@ -79,24 +79,37 @@ def _tagval(field, fallback="warn") -> str:
 
 
 # ── 진입 예상 타임라인 (ef-*) ────────────────────────────────────────────
-def _phase_from_rsi(cur):
-    """120분봉 RSI로 진입 단계를 결정론적으로 판정 (AI 추측 대신 데이터 기반)."""
+def _phase_from_rsi(cur, prev=None, rmin=None):
+    """120분봉 RSI '값 + 방향 + 최근 저점'으로 진입 단계 판정 (데이터 기반).
+
+    핵심: 이미 과매도(<=~32)를 찍고 반등 중이면 '진입 임박'이 아니라 '상승 전환'.
+    """
     if cur is None:
         return ("wait", "데이터 부족")
+    rising = prev is not None and cur > prev + 0.5
+    falling = prev is not None and cur < prev - 0.5
+    # ① 과매도 저점 찍고 반등 → 상승 추세 전환
+    if rmin is not None and rmin <= 32 and rising and cur >= rmin + 3:
+        return ("hot", "상승 전환")
+    # ② 과열
+    if cur >= 70:
+        return ("wait", "조정 대기")
+    # ③ 과매도권
     if cur <= 35:
-        return ("hot", "진입 적기")      # 이미 과매도 — 진입 구간
-    if cur <= 50:
-        return ("near", "진입 임박")      # 목표 근접
-    if cur <= 65:
-        return ("near", "관망")          # 중립 — 추가 신호 대기
-    return ("wait", "조정 대기")          # 과열 — 눌림 대기
+        return ("hot", "반등 시작" if rising else "진입 적기")
+    # ④ 중립권 — 방향에 따라
+    if cur <= 55:
+        return ("near", "반등 진행" if rising else "진입 임박")
+    # ⑤ 중상단
+    return ("near", "관망") if rising else ("wait", "조정 진행")
 
 
 def _entry_forecast(tk, intra, et) -> str:
     cur = intra.get("rsi")
     cur_pct = max(0, min(100, cur if cur is not None else 50))
     target = _i(et.get("target_rsi", 30), 30)
-    phase, phase_label = _phase_from_rsi(cur)   # 데이터 기반 — AI phase 무시
+    # 데이터 기반(값+방향+저점) — AI phase 무시
+    phase, phase_label = _phase_from_rsi(cur, intra.get("rsi_prev"), intra.get("rsi_min"))
     steps = et.get("steps", []) or []
     win = et.get("window", {}) or {}
 

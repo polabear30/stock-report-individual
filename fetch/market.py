@@ -31,7 +31,12 @@ def _indicator_snapshot(df: pd.DataFrame) -> Dict[str, Any]:
     out: Dict[str, Any] = {"last": _r(close.iloc[-1])}
 
     if len(close) >= 15:
-        out["rsi"] = _r(RSIIndicator(close, 14).rsi().iloc[-1], 1)
+        rsi_s = RSIIndicator(close, 14).rsi().dropna()
+        out["rsi"] = _r(rsi_s.iloc[-1], 1)
+        # 방향성/최근 저점 — 진입 단계 판정용 (값뿐 아니라 추세 반영)
+        out["rsi_prev"] = _r(rsi_s.iloc[-4], 1) if len(rsi_s) >= 4 else out["rsi"]
+        recent = rsi_s.tail(14)
+        out["rsi_min"] = _r(recent.min(), 1) if len(recent) else out["rsi"]
         st = StochasticOscillator(high, low, close)
         out["stoch_k"] = _r(st.stoch().iloc[-1], 1)
         out["stoch_d"] = _r(st.stoch_signal().iloc[-1], 1)
@@ -61,8 +66,26 @@ def _indicator_snapshot(df: pd.DataFrame) -> Dict[str, Any]:
 
 
 def _resample_120m(df60: pd.DataFrame) -> pd.DataFrame:
-    agg = {"Open": "first", "High": "max", "Low": "min", "Close": "last", "Volume": "sum"}
-    return df60.resample("120min").agg(agg).dropna()
+    """60분봉을 거래일별로 '장 시작(첫 봉) 기준' 2개씩 묶어 120분봉 생성.
+
+    단순 시계 기준 resample('120min')은 미 정규장 9:30 ET 세션과 어긋나
+    차트 플랫폼(TradingView 등)의 120분봉과 불일치한다. 세션 시작 기준으로
+    묶어야 9:30-11:30, 11:30-13:30, 13:30-15:30, 15:30-16:00 봉이 맞춰진다.
+    """
+    rows, idx = [], []
+    for _, g in df60.groupby(df60.index.date):
+        g = g.sort_index()
+        for i in range(0, len(g), 2):
+            chunk = g.iloc[i:i + 2]
+            rows.append({
+                "Open": chunk["Open"].iloc[0], "High": chunk["High"].max(),
+                "Low": chunk["Low"].min(), "Close": chunk["Close"].iloc[-1],
+                "Volume": chunk["Volume"].sum(),
+            })
+            idx.append(chunk.index[0])
+    if not rows:
+        return df60.iloc[0:0]
+    return pd.DataFrame(rows, index=pd.DatetimeIndex(idx))
 
 
 def _options_pcr(t: yf.Ticker) -> Dict[str, Any]:
