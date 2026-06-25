@@ -165,9 +165,9 @@ def fetch_stock_data(ticker: str) -> Dict[str, Any]:
     except Exception as e:
         result["errors"].append(f"daily:{e}")
 
-    # 120분봉 (60분봉 → 리샘플)
+    # 120분봉 (60분봉 → 리샘플). 프리장·애프터장 포함 → 증권사 차트(실시간/연장거래)와 정합
     try:
-        h = t.history(period="60d", interval="60m")
+        h = t.history(period="60d", interval="60m", prepost=True)
         if not h.empty:
             r120 = _resample_120m(h)
             if len(r120) >= 15:
