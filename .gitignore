@@ -1,0 +1,10 @@
+# 환경/비밀
+.env
+
+# 빌드 산출물
+_site/
+status.json
+
+# 파이썬
+__pycache__/
+*.pyc
