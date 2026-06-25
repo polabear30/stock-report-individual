@@ -79,11 +79,24 @@ def _tagval(field, fallback="warn") -> str:
 
 
 # ── 진입 예상 타임라인 (ef-*) ────────────────────────────────────────────
+def _phase_from_rsi(cur):
+    """120분봉 RSI로 진입 단계를 결정론적으로 판정 (AI 추측 대신 데이터 기반)."""
+    if cur is None:
+        return ("wait", "데이터 부족")
+    if cur <= 35:
+        return ("hot", "진입 적기")      # 이미 과매도 — 진입 구간
+    if cur <= 50:
+        return ("near", "진입 임박")      # 목표 근접
+    if cur <= 65:
+        return ("near", "관망")          # 중립 — 추가 신호 대기
+    return ("wait", "조정 대기")          # 과열 — 눌림 대기
+
+
 def _entry_forecast(tk, intra, et) -> str:
     cur = intra.get("rsi")
     cur_pct = max(0, min(100, cur if cur is not None else 50))
     target = _i(et.get("target_rsi", 30), 30)
-    phase = et.get("phase", "wait")
+    phase, phase_label = _phase_from_rsi(cur)   # 데이터 기반 — AI phase 무시
     steps = et.get("steps", []) or []
     win = et.get("window", {}) or {}
 
@@ -117,7 +130,7 @@ def _entry_forecast(tk, intra, et) -> str:
       <div class="ef-header">
         <span class="ef-icon">🎯</span>
         <span class="ef-title" style="color:var(--color-warning);">120분봉 RSI 진입 예상 타임라인 — {esc(tk)}</span>
-        <span class="ef-phase {esc(phase)}">{esc(et.get("phase_label",""))}</span>
+        <span class="ef-phase {esc(phase)}">{esc(phase_label)}</span>
       </div>
       <div class="ef-rsi-row">
         <span class="ef-rsi-label">현재 RSI {_num(cur)}</span>
