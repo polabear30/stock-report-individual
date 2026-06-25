@@ -111,10 +111,10 @@ def _rsi_signal(series):
 
 def _rsi_chart_svg(series) -> str:
     """최근 20봉(120분) RSI 라인차트 — 30/50/70 기준선 + 터치 지점 마커."""
-    s = [x for x in (series or []) if x is not None][-20:]
+    s = [x for x in (series or []) if x is not None][-84:]
     if len(s) < 2:
         return '<div style="font-size:11px;color:var(--text-muted);padding:8px 0;">RSI 데이터 부족</div>'
-    W, H, L, R, T, B = 600, 200, 34, 594, 14, 172
+    W, H, L, R, T, B = 840, 220, 34, 834, 14, 192
     n = len(s)
     X = lambda i: L + (R - L) * i / (n - 1)
     Y = lambda v: B - (B - T) * max(0, min(100, v)) / 100
@@ -170,7 +170,7 @@ def _entry_forecast(tk, intra, et) -> str:
       </div>
       {_rsi_chart_svg(series)}
       <div style="font-size:10px;color:var(--text-muted);text-align:right;margin-bottom:8px;">
-        최근 20봉 · 프리장·정규장·애프터장 포함 · 현재 RSI {_num(cur)}
+        최근 84봉(약 1주) · 프리·정규·애프터 포함 · 현재 RSI {_num(cur)}
         &nbsp;|&nbsp; 🟢30 터치·반등=매수 / 🔴70 터치·하락=매도
       </div>{window_html}
     </div>'''

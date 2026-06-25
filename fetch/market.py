@@ -37,8 +37,8 @@ def _indicator_snapshot(df: pd.DataFrame) -> Dict[str, Any]:
         out["rsi_prev"] = _r(rsi_s.iloc[-4], 1) if len(rsi_s) >= 4 else out["rsi"]
         recent = rsi_s.tail(14)
         out["rsi_min"] = _r(recent.min(), 1) if len(recent) else out["rsi"]
-        # 최근 20봉 RSI 시계열 (차트 + 30/70 터치 시그널용)
-        out["rsi_series"] = [_r(x, 1) for x in rsi_s.tail(20).tolist()]
+        # 최근 84봉(약 1주, 120분봉) RSI 시계열 (차트 + 30/70 터치 시그널용)
+        out["rsi_series"] = [_r(x, 1) for x in rsi_s.tail(84).tolist()]
         st = StochasticOscillator(high, low, close)
         out["stoch_k"] = _r(st.stoch().iloc[-1], 1)
         out["stoch_d"] = _r(st.stoch_signal().iloc[-1], 1)
