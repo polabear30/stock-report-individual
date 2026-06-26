@@ -1,0 +1,9 @@
+# Cloud Run Job(개별 종목 리포트) 의존성.
+# 전체 requirements.txt + GCS 업로드용 google-cloud-storage.
+yfinance>=0.2.40
+pandas>=2.1.0
+ta>=0.11.0
+requests>=2.31.0
+openai>=1.40.0
+anthropic>=0.39.0
+google-cloud-storage>=2.16.0

@@ -46,18 +46,14 @@ def _retry(fn, validate, attempts=3, delay=3):
     return result, False
 
 
-def main():
-    ap = argparse.ArgumentParser(description="개별 종목 AI 분석 리포트 생성")
-    ap.add_argument("--out", default="_site/index.html")
-    ap.add_argument("--status-out", default="status.json")
-    ap.add_argument("--mock", action="store_true", help="키 없이 모의 AI로 렌더 검증")
-    ap.add_argument("--only", default=None, help="특정 티커만 (콤마 구분)")
-    ap.add_argument("--provider", default=None, help="openai | anthropic")
-    args = ap.parse_args()
+def build(only=None, mock=False, provider=None):
+    """리포트 HTML과 수집 상태를 생성해 (doc, status)로 반환한다.
 
+    CLI(main)와 Cloud Run Job(run_job)이 공유하는 오케스트레이션 코어.
+    """
     tickers = config.TICKERS
-    if args.only:
-        want = {t.strip().upper() for t in args.only.split(",")}
+    if only:
+        want = {t.strip().upper() for t in only.split(",")}
         tickers = [t for t in tickers if t["ticker"] in want]
 
     panels = []
@@ -70,17 +66,30 @@ def main():
         status[f"{tk}·데이터"] = ok
 
         print(f"[{tk}] 뉴스 수집…")
-        news = fetch_news(tk) if not args.mock else {"articles": []}
+        news = fetch_news(tk) if not mock else {"articles": []}
 
-        print(f"[{tk}] AI 분석 생성… ({'모의' if args.mock else (args.provider or os.environ.get('LLM_PROVIDER','openai'))})")
+        print(f"[{tk}] AI 분석 생성… ({'모의' if mock else (provider or os.environ.get('LLM_PROVIDER','openai'))})")
         context = {"meta": meta, "market": market or {}, "news": news}
-        analysis = generate_analysis(context, meta["type"], provider=args.provider, mock=args.mock)
+        analysis = generate_analysis(context, meta["type"], provider=provider, mock=mock)
         status[f"{tk}·AI"] = "_error" not in analysis
 
         panels.append({"meta": meta, "market": market or {}, "analysis": analysis})
 
     gen = datetime.now(KST).strftime("%Y-%m-%d %H:%M KST")
     doc = render_report(panels, gen, status)
+    return doc, status
+
+
+def main():
+    ap = argparse.ArgumentParser(description="개별 종목 AI 분석 리포트 생성")
+    ap.add_argument("--out", default="_site/index.html")
+    ap.add_argument("--status-out", default="status.json")
+    ap.add_argument("--mock", action="store_true", help="키 없이 모의 AI로 렌더 검증")
+    ap.add_argument("--only", default=None, help="특정 티커만 (콤마 구분)")
+    ap.add_argument("--provider", default=None, help="openai | anthropic")
+    args = ap.parse_args()
+
+    doc, status = build(only=args.only, mock=args.mock, provider=args.provider)
 
     os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
     with open(args.out, "w", encoding="utf-8") as f:

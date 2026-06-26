@@ -3,9 +3,12 @@ name: 개별 종목 AI 리포트
 # 06:30 KST, 화~토만 (일·월 미실행). 금요일 미국장 마감 → 토요일 아침 반영.
 # cron은 UTC라 21:30 UTC = KST 다음날 06:30 → UTC 월~금(1-5) = KST 화~토.
 on:
-  schedule:
-    - cron: "30 21 * * 1-5"
-  workflow_dispatch: {}
+  # 자동 스케줄은 GCP Cloud Scheduler로 이관됨(2026-06-26).
+  # 중복 게시 방지를 위해 GitHub cron 비활성화. 비상 시 수동 실행:
+  # Actions 탭 → "개별 종목 AI 리포트" → Run workflow.
+  # schedule:
+  #   - cron: "30 21 * * 1-5"
+  workflow_dispatch: {}   # 수동 실행 버튼 (비상용 백업)
 
 permissions:
   contents: read
