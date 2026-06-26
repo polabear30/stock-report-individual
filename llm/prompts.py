@@ -47,9 +47,9 @@ def build_messages(context: Dict[str, Any], ticker_type: str) -> Dict[str, str]:
 위 데이터/뉴스에만 근거해, 아래 JSON 구조에 맞춰 한국어로 채워라.
 
 [완결성 규칙 — 빈 칸 금지]
-- 모든 필드를 채운다. waves 3~5개(엘리어트 파동상 4파·5파가 진행/유효하면 반드시 포함, current=true는 현재 파동 1개),
+- 모든 필드를 채운다. waves 정확히 5개(엘리어트 1~5파를 빠짐없이; current=true는 현재 진행 파동 정확히 1개),
   scenarios 3개(pct 합=100), probability 3개(pct 합=100),
-  strategy.buy 3~4개·strategy.sell 3~4개, entry_timeline.steps 정확히 4개(현재→1차→2차→진입구간),
+  strategy.buy 정확히 4개·strategy.sell 정확히 4개(가격대별 분할로 빠짐없이), entry_timeline.steps 정확히 4개(현재→1차→2차→진입구간),
   investor 3개(신규/보유/장기), pcr_comment 필수 작성.
 - entry_timeline은 120분봉 RSI가 목표(보통 30)까지 가는 단계별 예상 경로를 단계마다 RSI·가격·소요 캔들 추정으로.
 - 숫자 점수(scores, *.pct, target_rsi, reliability.stars)는 정수. dir/level/verdict_dir은 bull|warn|bear 중 하나.

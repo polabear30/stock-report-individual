@@ -251,15 +251,17 @@ body {
 .ef-step-date  { font-size:10px; color:var(--text-muted); flex-shrink:0; white-space:nowrap; }
 
 .ef-window {
-  display:flex; align-items:center; gap:12px;
+  display:flex; align-items:center; gap:10px;
   border:1px solid; border-radius:var(--radius-lg); padding:12px 14px;
-  flex-wrap:wrap; gap:10px;
+  flex-wrap:wrap;
 }
+/* 세 그룹(대응 시나리오 / 관심 가격대 / 노트)을 가로폭에 균등 분배 — 왼쪽 쏠림 방지 */
+.ef-window > div:not(.ef-window-divider) { flex:1 1 0; min-width:0; }
 .ef-window-label { font-size:9px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:3px; }
 .ef-window-date  { font-size:13px; font-weight:700; color:var(--text-primary); }
 .ef-window-price { font-size:18px; font-weight:900; }
 .ef-window-divider { width:1px; height:32px; background:var(--border-primary); flex-shrink:0; }
-.ef-window-note { font-size:10px; color:var(--text-muted); line-height:1.6; flex:1; min-width:160px; }
+.ef-window-note { font-size:10px; color:var(--text-muted); line-height:1.6; text-align:right; }
 
 /* ════════════════════════════
    CONCLUSION BOX
