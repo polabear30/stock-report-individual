@@ -1,10 +1,10 @@
 name: 개별 종목 AI 리포트
 
-# 06:30 KST, 월~금만 (주말 미실행). cron은 UTC 기준이고 21:30 UTC = KST 다음날 06:30 →
-# 요일이 한 칸 밀려 UTC 일~목(0-4) = KST 월~금.
+# 06:30 KST, 화~토만 (일·월 미실행). 금요일 미국장 마감 → 토요일 아침 반영.
+# cron은 UTC라 21:30 UTC = KST 다음날 06:30 → UTC 월~금(1-5) = KST 화~토.
 on:
   schedule:
-    - cron: "30 21 * * 0-4"
+    - cron: "30 21 * * 1-5"
   workflow_dispatch: {}
 
 permissions:
