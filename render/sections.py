@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import html
+import re
 from typing import Any, Dict, List
 
 
@@ -149,14 +150,18 @@ def _entry_forecast(tk, intra, et) -> str:
     cur = intra.get("rsi")
     label, color, hot = _rsi_signal(series)
     win = et.get("window", {}) or {}
+    entry_p = win.get("entry_price") or win.get("price") or ""   # 신규 진입가(구버전 price 폴백)
+    exit_p = win.get("exit_price") or ""                          # 보유자 매도/익절가
 
     window_html = ""
-    if win.get("date") or win.get("price"):
+    if win.get("date") or entry_p or exit_p:
         window_html = f'''
       <div class="ef-window">
         <div><div class="ef-window-label">대응 시나리오</div><div class="ef-window-date">{esc(win.get("date",""))}</div></div>
         <div class="ef-window-divider"></div>
-        <div><div class="ef-window-label">관심 가격대</div><div class="ef-window-price" style="color:var(--accent-blue);">{esc(win.get("price",""))}</div></div>
+        <div><div class="ef-window-label">신규 진입 가격대</div><div class="ef-window-price" style="color:var(--accent-blue);">{esc(entry_p)}</div></div>
+        <div class="ef-window-divider"></div>
+        <div><div class="ef-window-label">보유자 매도 가격대</div><div class="ef-window-price" style="color:var(--color-bull);">{esc(exit_p)}</div></div>
         <div class="ef-window-divider"></div>
         <div class="ef-window-note">{esc(win.get("note",""))}</div>
       </div>'''
@@ -279,11 +284,20 @@ def render_panel(meta: Dict[str, Any], market: Dict[str, Any],
 
     # ③ 호재/리스크
     P.append(_section_title(3, "기초지수 동인 / 구조 위험" if is_etf else "상승 이유 / 리스크"))
+    def _src_date(src: str) -> str:
+        # source에서 확인된 날짜만 추출(영어 기사 제목 등은 버림). YYYY-MM-DD 우선, 없으면 MM/DD·M/D.
+        m = re.search(r'\d{4}-\d{2}-\d{2}', src or "")
+        if m:
+            return m.group(0)
+        m = re.search(r'\b\d{1,2}/\d{1,2}\b', src or "")
+        return m.group(0) if m else ""
     def _cr(items, kind):
-        rows = "".join(
-            f'<div class="row"><span class="row-label">{esc(it.get("title",""))}'
-            + (f'<br><span style="font-size:10px;color:var(--text-muted);">{esc(it.get("source",""))}</span>' if it.get("source") else "")
-            + f'</span>{_tag(it.get("tag",""), kind)}</div>' for it in (items or []))
+        rows = ""
+        for it in (items or []):
+            d = _src_date(it.get("source", ""))
+            src = f'<br><span style="font-size:10px;color:var(--text-muted);">📅 {esc(d)}</span>' if d else ""
+            rows += (f'<div class="row"><span class="row-label">{esc(it.get("title",""))}{src}'
+                     f'</span>{_tag(it.get("tag",""), kind)}</div>')
         return rows or '<div class="row"><span class="row-label" style="color:var(--text-muted);">근거 뉴스 없음</span></div>'
     P.append(f'''<div class="grid2">
       <div class="card"><div class="card-title" style="color:var(--color-bull);">{"상방 동인" if is_etf else "호재 카탈리스트"}</div>{_cr(a.get("catalysts"),"bull")}</div>
@@ -470,8 +484,18 @@ def _sentiment_section(a, an, market, last, is_etf) -> str:
             vs = f'<span style="font-size:11px;color:var(--text-muted);font-weight:400;">현재가 대비 {"+" if pct>=0 else ""}{pct:.1f}%</span>'
         rows.append(f'<div class="row"><span class="row-label">{_circ(n)} 컨센서스 목표가</span><span class="row-val">${_num(tgt)} {vs}</span></div>')
         n += 1
-    # 내부자
-    rows.append(f'<div class="row"><span class="row-label">{_circ(n)} 내부자 동향</span><span style="font-size:12px;color:var(--text-quaternary);">{esc(sd.get("insider","—"))}</span></div>')
+    # 내부자 — 매수/매도 동향이 확인되면 토글로 강하게 강조, 없으면 일반 행
+    ins = (sd.get("insider") or "").strip()
+    if ins and ins not in ("—", "공개 정보 없음"):
+        sell = "매도" in ins
+        buy = "매수" in ins
+        col = "var(--color-bear)" if sell else ("var(--color-bull)" if buy else "var(--color-warning)")
+        head = ("🔴 내부자 매도 포착" if sell else "🟢 내부자 매수 포착" if buy else "⚠ 내부자 동향")
+        rows.append(f'''<details class="insider-flag" open style="--ins:{col};">
+          <summary>{_circ(n)} {head}</summary>
+          <div class="insider-body">{esc(ins)}</div></details>''')
+    else:
+        rows.append(f'<div class="row"><span class="row-label">{_circ(n)} 내부자 동향</span><span style="font-size:12px;color:var(--text-quaternary);">공개 정보 없음</span></div>')
     n += 1
     if not is_etf and market.get("earnings_date"):
         rows.append(f'<div class="row"><span class="row-label">{_circ(n)} 다음 어닝</span>{_tag(market.get("earnings_date")+" ★","orange")}</div>')

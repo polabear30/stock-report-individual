@@ -35,7 +35,7 @@ def default_analysis() -> Dict[str, Any]:
             "phase": "wait", "phase_label": "",
             "target_rsi": 30,
             "steps": [],   # [{title, desc, date, level(bear|warn|bull)}]
-            "window": {"date": "", "price": "", "note": ""},
+            "window": {"date": "", "entry_price": "", "exit_price": "", "note": ""},
         },
         "catalysts": [],   # [{title, tag, source}]
         "risks": [],       # [{title, tag, source}]
@@ -99,9 +99,9 @@ JSON_SHAPE = """{
   "entry_timeline": {"phase":"wait|imminent|enter 중 하나", "phase_label":"예: 조정 대기 / 진입 임박",
     "target_rsi": 30,
     "steps": [{"title":"📍 현재 — RSI ... 단계", "desc":"근거 설명", "date":"예: 4/23 현재 또는 날짜범위", "level":"bear|warn|bull"}],
-    "window": {"date":"예상 진입 윈도우(날짜범위)", "price":"예상 진입 가격대 $..~$..", "note":"⚠ 진입 필수 확인 조건"}},
-  "catalysts": [{"title": "호재 제목", "tag": "짧은 태그", "source": "근거 기사 제목/날짜 (없으면 '')"}],
-  "risks": [{"title": "리스크", "tag": "태그", "source": "근거"}],
+    "window": {"date":"YYYY-MM-DD~YYYY-MM-DD (구체 날짜범위만)", "entry_price":"$..~$.. (신규 진입 가격대, 가격 숫자만·라벨문구 금지)", "exit_price":"$..~$.. (보유자 매도/익절 가격대, 가격 숫자만)", "note":"진입과 매도 조건을 함께 한 줄로"}},
+  "catalysts": [{"title": "호재 제목(한국어)", "tag": "짧은 태그", "source": "근거 기사의 확인된 날짜만 YYYY-MM-DD (영어 기사제목 절대 금지, 없으면 '')"}],
+  "risks": [{"title": "리스크(한국어)", "tag": "태그", "source": "근거 기사의 확인된 날짜만 YYYY-MM-DD (영어 제목 금지, 없으면 '')"}],
   "waves": [{"num": "1파", "range": "$13→$19", "desc": "설명", "current": false}],
   "scenarios": [{"label": "시나리오 설명 + 목표가", "pct": "<확률 정수, 3개 합 100>", "dir": "bull"}],
   "strategy": {"buy": [{"label": "1차 매수 조건", "price": "$48~50"}],
@@ -115,7 +115,7 @@ JSON_SHAPE = """{
                {"type":"기존 보유자", "verdict":"", "verdict_dir":"warn", "detail":""},
                {"type":"장기 투자자", "verdict":"", "verdict_dir":"bull", "detail":""}],
   "sentiment_detail": {"retail":"개인/소매 심리 한 줄(예: Extremely Bullish · 언급량 급증)", "retail_dir":"bull|warn|bear",
-    "insider":"내부자 동향(뉴스 근거 또는 '공개 정보 없음')", "summary":"심리 요약 한 줄(개인 vs 월가 vs 내부자)",
+    "insider":"내부자 매수/매도 동향 — 뉴스 근거로 구체적으로(매수/매도 여부·규모·날짜). 정보 없으면 정확히 '공개 정보 없음'", "summary":"심리 요약 한 줄(개인 vs 월가 vs 내부자)",
     "deadline":"주요 이슈 데드라인(예: FDA 일정, 정책 이벤트)"},
   "reliability": {"stars":"1~5 정수(데이터/뉴스 충분도)", "note":"신뢰도 코멘트 한 줄"},
   "sentiment": "시장심리/수급 요약(보조)",

@@ -551,5 +551,31 @@ body {
   .tab-item { padding: 8px 12px 7px; font-size: 11px; }
 }
 
+/* 내부자 매수/매도 강조 토글 */
+.insider-flag {
+  margin: 6px 0;
+  border: 1px solid var(--ins, var(--color-warning));
+  border-left-width: 3px;
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--ins, var(--color-warning)) 10%, transparent);
+  padding: 8px 12px;
+}
+.insider-flag > summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--ins, var(--color-warning));
+  list-style: none;
+}
+.insider-flag > summary::-webkit-details-marker { display: none; }
+.insider-flag > summary::after { content: " ▾"; opacity: 0.7; }
+.insider-flag[open] > summary::after { content: " ▴"; }
+.insider-body {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-secondary, var(--text-primary));
+}
+
 
 /* ════════════════════════════════

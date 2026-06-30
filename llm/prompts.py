@@ -53,7 +53,10 @@ def build_messages(context: Dict[str, Any], ticker_type: str) -> Dict[str, str]:
   investor 3개(신규/보유/장기), pcr_comment 필수 작성.
 - entry_timeline은 120분봉 RSI가 목표(보통 30)까지 가는 단계별 예상 경로를 단계마다 RSI·가격·소요 캔들 추정으로.
 - 숫자 점수(scores, *.pct, target_rsi, reliability.stars)는 정수. dir/level/verdict_dir은 bull|warn|bear 중 하나.
-- 예시에 적힌 숫자(예: 64, 40)를 그대로 복사하지 말고, 데이터에 근거해 종목마다 다르게 산출.
+- 예시에 적힌 숫자(예: 64, 40)·문구(예: "예상 진입 가격대")를 그대로 복사하지 말 것. 데이터에 근거해 종목마다 다르게 산출하고, 가격 필드엔 가격 범위만(라벨성 문구 금지).
+- entry_timeline.window: date는 반드시 구체 날짜범위(YYYY-MM-DD~YYYY-MM-DD), entry_price는 신규 진입 가격대, exit_price는 기존 보유자의 매도/익절 가격대를 모두 명기. note는 진입과 매도 조건을 함께 서술.
+- catalysts/risks의 source: 한국어 title로 내용을 쓰고, source에는 영어 기사 제목을 넣지 말 것 — 확인된 날짜(YYYY-MM-DD)만, 날짜 불명이면 ''.
+- sentiment_detail.insider: 내부자 매수/매도가 뉴스에 있으면 매수/매도 여부·날짜를 구체적으로, 없으면 정확히 '공개 정보 없음'.
 - 근거가 약한 항목도 비우지 말고 보수적으로 기술(단, 없는 사건·수치는 날조 금지).
 순수 JSON만 출력:
 
